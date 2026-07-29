@@ -4,7 +4,12 @@ import argparse
 import json
 import os
 import platform
+import re
+import shutil
+import subprocess
 import sys
+import time
+import uuid
 from pathlib import Path
 
 from . import SUPPORTED_PYTHON, __version__
@@ -48,6 +53,20 @@ def _parser() -> argparse.ArgumentParser:
         "--json", action="store_true", help="emit a machine-readable report"
     )
 
+    demo = subparsers.add_parser(
+        "demo", help="run a same-machine continuation demonstration"
+    )
+    demo.add_argument(
+        "--output-dir",
+        help="new or empty directory in which to retain demonstration evidence",
+    )
+    demo.add_argument(
+        "--iterations",
+        type=int,
+        default=20_000,
+        help="workload iterations (default: 20000)",
+    )
+
     freeze = subparsers.add_parser("freeze", help="freeze a running session")
     freeze.add_argument("session_id")
     freeze.add_argument("-o", "--output", required=True)
@@ -79,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
             return _sessions()
         if args.command == "doctor":
             return _doctor(args)
+        if args.command == "demo":
+            return _demo(args)
         if args.command == "freeze":
             return _freeze(args)
         if args.command == "inspect":
@@ -242,6 +263,288 @@ def _doctor(args: argparse.Namespace) -> int:
         else:
             print("Compatibility: OK")
     return 2 if problems else 0
+
+
+def _demo(args: argparse.Namespace) -> int:
+    _require_runtime_version()
+    if args.iterations < 1_000:
+        raise ContinuumError("demo requires at least 1000 iterations")
+
+    if args.output_dir:
+        output_dir = Path(args.output_dir).expanduser().resolve()
+    else:
+        output_dir = (
+            continuum_home() / "demos" / f"demo-{uuid.uuid4().hex[:12]}"
+        )
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise ContinuumError(f"demo output directory is not empty: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    examples = _examples_directory()
+    program = output_dir / "demo.py"
+    input_path = output_dir / "demo-input.txt"
+    control_input = output_dir / "control-input.txt"
+    try:
+        shutil.copyfile(examples / "demo.py", program)
+        shutil.copyfile(examples / "demo_input.txt", input_path)
+        shutil.copyfile(examples / "demo_input.txt", control_input)
+    except OSError as exc:
+        raise ContinuumError(f"cannot prepare demo workload: {exc}") from exc
+
+    image = output_dir / "demo.cont"
+    source_stdout = output_dir / "source-stdout.log"
+    source_stderr = output_dir / "source-stderr.log"
+    target_stdout = output_dir / "target-stdout.log"
+    target_stderr = output_dir / "target-stderr.log"
+    control_stdout = output_dir / "control-stdout.log"
+    control_stderr = output_dir / "control-stderr.log"
+    combined_output = output_dir / "combined-output.log"
+    comparison_path = output_dir / "comparison.json"
+    command = [sys.executable, "-m", "continuum"]
+    environment = os.environ.copy()
+    environment["CONTINUUM_HOME"] = str(output_dir / "source-home")
+    runtime_root = str(Path(__file__).resolve().parents[1])
+    inherited_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = (
+        runtime_root
+        if not inherited_pythonpath
+        else os.pathsep.join((runtime_root, inherited_pythonpath))
+    )
+
+    print("Same-machine continuation demonstration")
+    print(f"Evidence directory: {output_dir}")
+    print(f"Program: {program}")
+    print(f"Runtime: Python {SUPPORTED_PYTHON} / Continuum IR 0.2")
+
+    with (
+        source_stdout.open("w", encoding="utf-8") as stdout_handle,
+        source_stderr.open("w", encoding="utf-8") as stderr_handle,
+    ):
+        source = subprocess.Popen(
+            [
+                *command,
+                "run",
+                "--file-policy",
+                "bundle",
+                str(program),
+                str(input_path),
+                str(args.iterations),
+            ],
+            cwd=output_dir,
+            env=environment,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            text=True,
+        )
+        session_id = _wait_for_demo_session(source, source_stderr, source_stdout)
+        print("Continuum session started")
+        print(f"Session: {session_id}")
+        print(f"Source PID: {source.pid}")
+        print("Freeze command:")
+        print(f"  continuum freeze {session_id} -o {image}")
+
+        freeze = subprocess.run(
+            [*command, "freeze", session_id, "-o", str(image)],
+            cwd=output_dir,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if freeze.returncode != 0:
+            if source.poll() is None:
+                source.kill()
+                source.wait()
+            raise ContinuumError(
+                "demo freeze failed: "
+                + (freeze.stderr.strip() or freeze.stdout.strip())
+            )
+        source_returncode = source.wait(timeout=15)
+        if source_returncode != 0:
+            raise ContinuumError(
+                f"demo source exited with status {source_returncode}"
+            )
+        source_exited_before_target = source.poll() is not None
+
+    input_path.unlink()
+    inspect_result = subprocess.run(
+        [*command, "inspect", str(image)],
+        cwd=output_dir,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if inspect_result.returncode != 0:
+        raise ContinuumError(
+            "demo image inspection failed: " + inspect_result.stderr.strip()
+        )
+    print("Checkpoint committed")
+    print(inspect_result.stdout.rstrip())
+    print("Source process exited")
+    print("Original bundled input deleted")
+
+    target_environment = {
+        **environment,
+        "CONTINUUM_HOME": str(output_dir / "target-home"),
+    }
+    with (
+        target_stdout.open("w", encoding="utf-8") as stdout_handle,
+        target_stderr.open("w", encoding="utf-8") as stderr_handle,
+    ):
+        target = subprocess.Popen(
+            [*command, "resume", str(image), "--file-policy", "bundle"],
+            cwd=output_dir,
+            env=target_environment,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            text=True,
+        )
+        target_pid = target.pid
+        target_returncode = target.wait(timeout=60)
+    if target_returncode != 0:
+        raise ContinuumError(
+            "demo resume failed: "
+            + target_stderr.read_text(encoding="utf-8").strip()
+        )
+
+    control_environment = {
+        **environment,
+        "CONTINUUM_HOME": str(output_dir / "control-home"),
+    }
+    with (
+        control_stdout.open("w", encoding="utf-8") as stdout_handle,
+        control_stderr.open("w", encoding="utf-8") as stderr_handle,
+    ):
+        control = subprocess.run(
+            [
+                *command,
+                "run",
+                "--file-policy",
+                "bundle",
+                str(program),
+                str(control_input),
+                str(args.iterations),
+            ],
+            cwd=output_dir,
+            env=control_environment,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            text=True,
+            timeout=60,
+        )
+    if control.returncode != 0:
+        raise ContinuumError(
+            "demo control run failed: "
+            + control_stderr.read_text(encoding="utf-8").strip()
+        )
+
+    before = source_stdout.read_bytes()
+    after = target_stdout.read_bytes()
+    control_bytes = control_stdout.read_bytes()
+    combined = before + after
+    combined_output.write_bytes(combined)
+    resumed_hash = _demo_final_hash(combined)
+    control_hash = _demo_final_hash(control_bytes)
+    source_progress = _demo_progress(before)
+    target_progress = _demo_progress(after)
+    comparison = {
+        "source_pid": source.pid,
+        "source_returncode": source_returncode,
+        "target_pid": target_pid,
+        "target_returncode": target_returncode,
+        "source_exited_before_target": source_exited_before_target,
+        "new_target_process": True,
+        "pid_values_differ": target_pid != source.pid,
+        "original_input_absent": not input_path.exists(),
+        "combined_output_matches_control": combined == control_bytes,
+        "combined_output_bytes": len(combined),
+        "control_output_bytes": len(control_bytes),
+        "source_progress_last": source_progress[-1] if source_progress else None,
+        "target_progress_first": target_progress[0] if target_progress else None,
+        "resumed_final_hash": resumed_hash,
+        "control_final_hash": control_hash,
+        "final_hash_matches": resumed_hash == control_hash,
+        "identity_proof_once": combined.count(b"IDENTITY True True\n") == 1,
+        "final_output_once": combined.count(b"FINAL ") == 1,
+    }
+    comparison_path.write_text(
+        json.dumps(comparison, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    if not all(
+        comparison[key]
+        for key in (
+            "new_target_process",
+            "source_exited_before_target",
+            "original_input_absent",
+            "combined_output_matches_control",
+            "final_hash_matches",
+            "identity_proof_once",
+            "final_output_once",
+        )
+    ):
+        raise ContinuumError(f"demo comparison failed; see {comparison_path}")
+
+    print("Continuation restored")
+    print(f"Target PID: {target_pid}")
+    print(f"Last source progress: {comparison['source_progress_last']}")
+    print(f"First resumed progress: {comparison['target_progress_first']}")
+    print("Combined output matches uninterrupted control: yes")
+    print(f"Final result hash: {resumed_hash}")
+    print("Final result hash matches control: yes")
+    print(f"Evidence retained in: {output_dir}")
+    return 0
+
+
+def _examples_directory() -> Path:
+    bundle_manifest = os.environ.get("CONTINUUM_BUNDLE_MANIFEST")
+    if bundle_manifest:
+        candidate = Path(bundle_manifest).resolve().parent / "examples"
+    else:
+        candidate = Path(__file__).resolve().parents[1] / "examples"
+    if not (candidate / "demo.py").is_file() or not (
+        candidate / "demo_input.txt"
+    ).is_file():
+        raise ContinuumError(f"bundled demo workload is missing from {candidate}")
+    return candidate
+
+
+def _wait_for_demo_session(
+    process: subprocess.Popen[str],
+    stderr_path: Path,
+    stdout_path: Path,
+) -> str:
+    deadline = time.monotonic() + 20
+    session_id = None
+    while time.monotonic() < deadline:
+        stderr = stderr_path.read_text(encoding="utf-8")
+        if match := re.search(r"^Continuum session: (cont-[0-9a-f]+)$", stderr, re.M):
+            session_id = match.group(1)
+        stdout = stdout_path.read_text(encoding="utf-8")
+        if session_id and "Processing " in stdout:
+            return session_id
+        if process.poll() is not None:
+            raise ContinuumError(
+                "demo source exited before a checkpoint request could be made"
+            )
+        time.sleep(0.01)
+    raise ContinuumError("timed out waiting for the demo safe point")
+
+
+def _demo_progress(content: bytes) -> list[str]:
+    return [
+        line.decode("utf-8")
+        for line in content.splitlines()
+        if line.startswith(b"Processing ")
+    ]
+
+
+def _demo_final_hash(content: bytes) -> str | None:
+    matches = re.findall(rb"^FINAL ([0-9a-f]{64})$", content, re.MULTILINE)
+    if len(matches) != 1:
+        return None
+    return matches[0].decode("ascii")
 
 
 def _freeze(args: argparse.Namespace) -> int:
