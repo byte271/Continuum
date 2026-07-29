@@ -69,6 +69,11 @@ class DoctorTests(unittest.TestCase):
     def test_doctor_validates_self_contained_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:
             manifest = Path(temporary) / "runtime-manifest.json"
+            architecture = {
+                "amd64": "x86_64",
+                "x64": "x86_64",
+                "aarch64": "arm64",
+            }.get(platform.machine().lower(), platform.machine().lower())
             manifest.write_text(
                 json.dumps(
                     {
@@ -76,7 +81,7 @@ class DoctorTests(unittest.TestCase):
                         "ir_version": IR_VERSION,
                         "python_version": SUPPORTED_PYTHON,
                         "system": platform.system(),
-                        "architecture": platform.machine(),
+                        "architecture": architecture,
                         "self_contained": True,
                     }
                 ),
