@@ -203,7 +203,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
     (output / "linux-environment.txt").write_text(
         raw_environment, encoding="utf-8"
     )
-    required_result_indexes = (0, 1, 2, 3, 6, 7, 8, 9, 10, 11)
+    required_result_indexes = (0, 1, 6, 7, 8, 9, 10, 11)
     if any(
         environment_results[index].returncode != 0
         for index in required_result_indexes
@@ -218,6 +218,10 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         raise RuntimeError("validation interpreter is not native Linux x86_64")
     if environment_results[10].stdout:
         raise RuntimeError("Git working tree is not clean")
+    hardware_probes_verified = all(
+        environment_results[index].returncode == 0
+        for index in (2, 3, 4)
+    )
     qualified, qualification_failures, github = qualify_linux_source(
         system=platform.system(),
         machine=platform.machine(),
@@ -226,6 +230,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         python_system=python_identity_lines[0],
         python_machine=python_identity_lines[1],
         python_build_verified=python_build_verified,
+        hardware_probes_verified=hardware_probes_verified,
         container_markers=markers,
         emulation_markers=emulation,
         git_commit=str(identity["git_commit"]),
@@ -239,6 +244,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "emulation_markers": emulation,
         "github": github,
         "python_build_verified": python_build_verified,
+        "hardware_probes_verified": hardware_probes_verified,
     }
     write_json(output / "linux-qualification.json", qualification)
     write_json(output / "github-linux-metadata.json", github)
@@ -397,6 +403,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "python_executable": sys.executable,
         "python_build": python_build_metadata,
         "python_build_verified": python_build_verified,
+        "hardware_probes_verified": hardware_probes_verified,
         **identity,
         "source_tree_sha256_file": "source-tree.sha256",
         "source_pid": source_pid,

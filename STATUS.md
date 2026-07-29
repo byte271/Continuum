@@ -24,7 +24,7 @@ Updated: 2026-07-29
 - Failed checkpoint leaves source state live and permits a later successful
   retry.
 - Public `run`, `sessions`, `freeze`, `inspect`, `resume`, and `--version`.
-- Current full suite: 59 tests discovered, 58 passed, one native Apple Silicon
+- Current full suite: 60 tests discovered, 59 passed, one native Apple Silicon
   test skipped on this Linux x86_64 host.
 
 ## PARTIALLY WORKING

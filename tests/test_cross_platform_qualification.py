@@ -56,6 +56,7 @@ class CrossPlatformQualificationTests(unittest.TestCase):
         *,
         container_markers: tuple[str, ...] = (),
         emulation_markers: tuple[str, ...] = (),
+        hardware_probes_verified: bool = True,
         environment: dict[str, str] | None = None,
     ) -> tuple[bool, list[str], dict[str, str]]:
         return qualify_linux_source(
@@ -66,6 +67,7 @@ class CrossPlatformQualificationTests(unittest.TestCase):
             python_system="Linux",
             python_machine="x86_64",
             python_build_verified=True,
+            hardware_probes_verified=hardware_probes_verified,
             container_markers=container_markers,
             emulation_markers=emulation_markers,
             git_commit="a" * 40,
@@ -117,6 +119,16 @@ class CrossPlatformQualificationTests(unittest.TestCase):
         )
         self.assertFalse(qualified)
         self.assertIn("RUNNER_ARCH must be 'X64'", failures)
+
+    def test_missing_linux_hardware_probes_are_rejected(self):
+        qualified, failures, _ = self.linux_qualification(
+            hardware_probes_verified=False
+        )
+        self.assertFalse(qualified)
+        self.assertIn(
+            "required Linux hardware probes did not complete",
+            failures,
+        )
 
     def test_native_github_apple_silicon_target_is_qualified(self):
         qualified, failures, metadata = qualify_macos_target(

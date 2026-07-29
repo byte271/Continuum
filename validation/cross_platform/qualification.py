@@ -90,6 +90,7 @@ def qualify_linux_source(
     python_system: str,
     python_machine: str,
     python_build_verified: bool,
+    hardware_probes_verified: bool,
     container_markers: Sequence[str],
     emulation_markers: Sequence[str],
     git_commit: str,
@@ -115,6 +116,8 @@ def qualify_linux_source(
         failures.append("the built Python must report native Linux x86_64")
     if not python_build_verified:
         failures.append("the pinned CPython source build is not verified")
+    if not hardware_probes_verified:
+        failures.append("required Linux hardware probes did not complete")
     if container_markers:
         failures.append("application-container markers were detected")
     if emulation_markers:
