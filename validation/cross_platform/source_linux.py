@@ -94,6 +94,8 @@ def inspect_live_image(image: Path) -> dict[str, object]:
 
 def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
     repository = Path(__file__).resolve().parents[2]
+    if str(repository) not in sys.path:
+        sys.path.insert(0, str(repository))
     if repository == output or repository in output.parents:
         raise RuntimeError(
             "evidence directory must be outside the Git working tree"
