@@ -20,6 +20,7 @@ def inner_step(index, graph, big, rng, handle, nonce):
 
 
 def middle_layer(total, graph, big, rng, handle, nonce):
+    print("ACTION", nonce, "PROLOGUE_MIDDLE", flush=True)
     index = 0
     aggregate = 0
     while index < total:
@@ -34,7 +35,7 @@ def middle_layer(total, graph, big, rng, handle, nonce):
 
 
 def workload(path, total, nonce):
-    print("ACTION", nonce, "ENTRY", flush=True)
+    print("ACTION", nonce, "PROLOGUE_WORKLOAD", flush=True)
     shared = []
     graph = {"left": shared, "right": shared}
     graph["self"] = graph
@@ -72,4 +73,5 @@ def workload(path, total, nonce):
 input_path = __args__[1]
 iteration_count = int(__args__[2])
 proof_nonce = __args__[3]
+print("ACTION", proof_nonce, "ENTRY", flush=True)
 workload(input_path, iteration_count, proof_nonce)

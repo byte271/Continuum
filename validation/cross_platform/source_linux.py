@@ -22,6 +22,7 @@ from common import (
     sha256_file,
     utc_now,
     write_failure,
+    write_file_manifest,
     write_json,
 )
 
@@ -38,12 +39,19 @@ def container_markers() -> list[str]:
     for name in ("docker", "containerd", "kubepods", "lxc", "podman"):
         if name in cgroup.lower():
             markers.append(f"/proc/1/cgroup:{name}")
-    detection = subprocess.run(
-        ["systemd-detect-virt", "--container"],
-        text=True,
-        capture_output=True,
-    )
-    if detection.returncode == 0 and detection.stdout.strip() not in {"", "none"}:
+    try:
+        detection = subprocess.run(
+            ["systemd-detect-virt", "--container"],
+            text=True,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        detection = None
+    if (
+        detection is not None
+        and detection.returncode == 0
+        and detection.stdout.strip() not in {"", "none"}
+    ):
         markers.append(f"systemd-detect-virt:{detection.stdout.strip()}")
     return sorted(set(markers))
 
@@ -326,6 +334,29 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "recorded_at": utc_now(),
     }
     write_json(output / "source-evidence.json", evidence)
+    source_evidence_files = (
+        "control-input.txt",
+        "freeze-stderr.log",
+        "freeze-stdout.log",
+        "full-test-linux.txt",
+        "git-commit.txt",
+        "image-source.sha256",
+        "linux-environment.txt",
+        "linux-x86_64.cont",
+        "repository.sha256",
+        "repository.tar",
+        "source-evidence.json",
+        "source-stderr.log",
+        "source-stdout.log",
+        "source-tree.sha256",
+    )
+    write_file_manifest(
+        output,
+        source_evidence_files,
+        "linux-evidence.sha256",
+    )
+    for name in (*source_evidence_files, "linux-evidence.sha256"):
+        (output / name).chmod(0o444)
     return evidence
 
 

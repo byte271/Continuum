@@ -42,7 +42,9 @@ The command refuses obvious container environments. It:
 - deletes the original bundled input;
 - verifies four frames, operand/control state, shared identity, a cycle, RNG,
   nonzero file offset, and bundled resource metadata;
-- hashes the image and changes its mode to read-only.
+- hashes the image and changes its mode to read-only;
+- writes `linux-evidence.sha256` over the complete source-phase evidence and
+  makes those files read-only.
 
 `--rehearsal` permits a container-only mechanics test. Rehearsal evidence is
 marked disqualified and the macOS target script refuses it.
@@ -58,6 +60,7 @@ The target script independently checks:
 - the Git commit and clean tree;
 - every tracked source-file hash;
 - the repository archive hash;
+- every file listed in `linux-evidence.sha256`;
 - the image hash before resume.
 
 Any mismatch stops validation.
@@ -93,7 +96,8 @@ python3 -m continuum resume linux-x86_64.cont --file-policy bundle
 
 After resume it hashes the image again, runs the uninterrupted control, writes
 `combined-output.log`, and evaluates all 18 required conditions in
-`comparison.json`.
+`comparison.json`. It then writes `final-evidence.sha256` over the complete
+successful evidence set and makes those files read-only.
 
 ## Evidence files
 
@@ -104,6 +108,8 @@ git-commit.txt
 source-tree.sha256
 repository.tar
 repository.sha256
+linux-evidence.sha256
+final-evidence.sha256
 linux-environment.txt
 macos-environment.txt
 source-evidence.json
@@ -128,9 +134,12 @@ Failures write `failure.json` and retain everything produced before the
 failure. Never reuse a failed attempt directory. Fixes require a new commit and
 a new Linux image in a new attempt directory.
 
-PID numbers are recorded but are not required to differ because numeric PIDs
-can be reused. The required proof is that the source exit and reap timestamps
-precede creation of a separate target process.
+PID numbers and wall-clock timestamps are recorded, but timestamps from two
+independent hosts are not numerically compared because their clocks can be
+skewed. Causal ordering is established by the target script verifying the
+complete `linux-evidence.sha256` set—whose source evidence is written only
+after the source process exits and is reaped—before it creates the new target
+process.
 
 No `target-evidence.json` or successful `comparison.json` means cross-platform
 restoration remains unverified.

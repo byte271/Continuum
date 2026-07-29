@@ -19,8 +19,10 @@ from common import (
     run_full_tests,
     sha256_file,
     utc_now,
+    verify_file_manifest,
     verify_repository_identity,
     write_failure,
+    write_file_manifest,
     write_json,
 )
 
@@ -30,6 +32,10 @@ FINAL_PATTERN = re.compile(rb"^FINAL ([0-9a-f]{64})$", re.MULTILINE)
 
 def perform(evidence_dir: Path) -> dict[str, object]:
     repository = Path(__file__).resolve().parents[2]
+    if repository == evidence_dir or repository in evidence_dir.parents:
+        raise RuntimeError(
+            "evidence directory must be outside the Git working tree"
+        )
     if platform.system() != "Darwin":
         raise RuntimeError("target operating system is not Darwin")
     if platform.machine().lower() != "arm64":
@@ -55,6 +61,9 @@ def perform(evidence_dir: Path) -> dict[str, object]:
     if not source_evidence.get("deleted_original_input"):
         raise RuntimeError("original bundled input was not deleted on source")
 
+    linux_evidence_manifest_hash = verify_file_manifest(
+        evidence_dir, "linux-evidence.sha256"
+    )
     identity = verify_repository_identity(repository, evidence_dir)
     if identity["git_commit"] != source_evidence["git_commit"]:
         raise RuntimeError("source evidence Git commit is inconsistent")
@@ -171,8 +180,6 @@ def perform(evidence_dir: Path) -> dict[str, object]:
 
     target_started_at = utc_now()
     target_started_ns = time.time_ns()
-    if target_started_ns <= int(source_evidence["source_exited_unix_ns"]):
-        raise RuntimeError("target was created before the recorded source exit")
     target = subprocess.Popen(
         [
             sys.executable,
@@ -242,6 +249,10 @@ def perform(evidence_dir: Path) -> dict[str, object]:
         line for line in combined.splitlines() if line.startswith(action_prefix)
     ]
     entry_line = f"ACTION {source_evidence['nonce']} ENTRY".encode("utf-8")
+    prologue_lines = [
+        f"ACTION {source_evidence['nonce']} {name}".encode("utf-8")
+        for name in ("PROLOGUE_WORKLOAD", "PROLOGUE_MIDDLE")
+    ]
     iteration_prefix = (
         f"ACTION {source_evidence['nonce']} ITER ".encode("utf-8")
     )
@@ -256,7 +267,7 @@ def perform(evidence_dir: Path) -> dict[str, object]:
         "condition_02_source_exited_before_target_created": (
             bool(source_evidence["source_process_exited"])
             and bool(source_evidence["source_process_reaped"])
-            and target_started_ns > int(source_evidence["source_exited_unix_ns"])
+            and bool(linux_evidence_manifest_hash)
         ),
         "condition_03_native_real_macos_arm64_target": True,
         "condition_04_same_git_commit": final_commit
@@ -283,8 +294,8 @@ def perform(evidence_dir: Path) -> dict[str, object]:
         "condition_11_entry_actions_not_repeated": action_lines.count(entry_line)
         == 1,
         "condition_12_function_prologues_not_repeated": (
-            len(iteration_lines) == int(source_evidence["iterations"])
-            and len(iteration_lines) == len(set(iteration_lines))
+            all(action_lines.count(line) == 1 for line in prologue_lines)
+            and all(line not in target_stdout for line in prologue_lines)
         ),
         "condition_13_completed_loop_actions_not_repeated": (
             len(iteration_lines) == len(set(iteration_lines))
@@ -305,7 +316,9 @@ def perform(evidence_dir: Path) -> dict[str, object]:
             for name in (
                 "git-commit.txt",
                 "source-tree.sha256",
+                "repository.tar",
                 "repository.sha256",
+                "linux-evidence.sha256",
                 "linux-environment.txt",
                 "macos-environment.txt",
                 "source-evidence.json",
@@ -367,6 +380,8 @@ def perform(evidence_dir: Path) -> dict[str, object]:
         "source_exited_at": source_evidence["source_exited_at"],
         "source_process_exited": source_evidence["source_process_exited"],
         "source_process_reaped": source_evidence["source_process_reaped"],
+        "causal_order_proven_by_completed_source_evidence": True,
+        "linux_evidence_manifest_sha256": linux_evidence_manifest_hash,
         "target_pid": target_pid,
         "target_started_at": target_started_at,
         "target_started_unix_ns": target_started_ns,
@@ -391,6 +406,41 @@ def perform(evidence_dir: Path) -> dict[str, object]:
         "recorded_at": utc_now(),
     }
     write_json(evidence_dir / "target-evidence.json", evidence)
+    final_evidence_files = (
+        "combined-output.log",
+        "comparison.json",
+        "control-input.txt",
+        "control-stderr.log",
+        "control-stdout.log",
+        "freeze-stderr.log",
+        "freeze-stdout.log",
+        "full-test-linux.txt",
+        "full-test-macos.txt",
+        "git-commit.txt",
+        "image-source.sha256",
+        "image-target-after.sha256",
+        "image-target-before.sha256",
+        "linux-environment.txt",
+        "linux-evidence.sha256",
+        "linux-x86_64.cont",
+        "macos-environment.txt",
+        "repository.sha256",
+        "repository.tar",
+        "source-evidence.json",
+        "source-stderr.log",
+        "source-stdout.log",
+        "source-tree.sha256",
+        "target-evidence.json",
+        "target-stderr.log",
+        "target-stdout.log",
+    )
+    write_file_manifest(
+        evidence_dir,
+        final_evidence_files,
+        "final-evidence.sha256",
+    )
+    for name in (*final_evidence_files, "final-evidence.sha256"):
+        (evidence_dir / name).chmod(0o444)
     return evidence
 
 

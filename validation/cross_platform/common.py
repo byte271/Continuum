@@ -216,6 +216,61 @@ def write_json(path: Path, value: object) -> None:
     )
 
 
+def write_file_manifest(
+    directory: Path, names: Iterable[str], destination: str
+) -> str:
+    lines = []
+    unique_names = sorted(set(names))
+    if destination in unique_names:
+        raise RuntimeError("an evidence manifest cannot include itself")
+    for name in unique_names:
+        if (
+            not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+        ):
+            raise RuntimeError(f"unsafe evidence filename: {name!r}")
+        path = directory / name
+        if not path.is_file():
+            raise RuntimeError(f"evidence file is missing: {name}")
+        lines.append(f"{sha256_file(path)}  {name}\n")
+    content = "".join(lines)
+    (directory / destination).write_text(content, encoding="utf-8")
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def verify_file_manifest(directory: Path, manifest_name: str) -> str:
+    manifest_path = directory / manifest_name
+    content = manifest_path.read_text(encoding="utf-8")
+    seen: set[str] = set()
+    for line in content.splitlines():
+        try:
+            expected, name = line.split("  ", 1)
+        except ValueError as exc:
+            raise RuntimeError(f"invalid evidence manifest line: {line!r}") from exc
+        if (
+            len(expected) != 64
+            or any(character not in "0123456789abcdef" for character in expected)
+        ):
+            raise RuntimeError(f"invalid SHA-256 in evidence manifest: {line!r}")
+        if (
+            not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+            or name in seen
+        ):
+            raise RuntimeError(f"unsafe evidence manifest filename: {name!r}")
+        seen.add(name)
+        path = directory / name
+        if not path.is_file() or sha256_file(path) != expected:
+            raise RuntimeError(f"evidence file hash mismatch: {name}")
+    if not seen:
+        raise RuntimeError("evidence manifest is empty")
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
 def write_failure(evidence: Path, phase: str, exception: BaseException) -> None:
     import traceback
 
