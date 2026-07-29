@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.cont
+*.zip
+*.tar
+*.prof
+.coverage
+.continuum/
+.tmp-home*/
+artifacts/
+evidence-runs/
+build/
+dist/
+*.egg-info/

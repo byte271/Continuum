@@ -1,0 +1,6 @@
+alpha: portable execution state
+beta: shared object identity
+gamma: cyclic object graph
+delta: deterministic random state
+epsilon: regular file rebinding
+

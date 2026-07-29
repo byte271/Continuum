@@ -1,0 +1,22 @@
+{
+  "compression_ratio": 6.516530860728669,
+  "environment": {
+    "continuum_version": "0.1.0.dev0",
+    "machine": "x86_64",
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.39",
+    "python": "3.12.13"
+  },
+  "expanded_image_bytes": 139154,
+  "freeze_seconds": 0.018063288000121247,
+  "heap_objects": 18,
+  "image_bytes": 21354,
+  "instructions_before_freeze": 115015,
+  "iterations": 10000,
+  "max_rss_platform_units": 24992,
+  "native_control_seconds": 0.0021159080006327713,
+  "remaining_run_seconds": 0.0904125879987987,
+  "resume_load_seconds": 0.008950203999120276,
+  "runtime_slowdown": 589.9571179971747,
+  "vm_control_seconds": 1.2482949860004737,
+  "vm_peak_traced_bytes": 402388
+}

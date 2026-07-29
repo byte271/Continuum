@@ -1,0 +1,81 @@
+{
+  "checkpoint_phases_seconds": {
+    "complete_image_commit": 0.020603707000191207,
+    "graph_encode": 0.007808258998920792,
+    "heap_json_encode": 0.0032345430008717813,
+    "image_load_and_validate": 0.005845326000780915,
+    "remaining_execution": 0.08350858999983757,
+    "resource_rebind_graph_decode_and_vm_restore": 0.0027825850011140574,
+    "resource_snapshot": 1.1779000487877056e-05
+  },
+  "compile": {
+    "median_seconds": 0.0003371599996171426,
+    "minimum_seconds": 0.00031264300014299806,
+    "samples_seconds": [
+      0.0012792119996447582,
+      0.0005935199988016393,
+      0.0003230639995308593,
+      0.0003371599996171426,
+      0.00031264300014299806
+    ]
+  },
+  "environment": {
+    "continuum_version": "0.1.1.dev0",
+    "machine": "x86_64",
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "python_implementation": "CPython"
+  },
+  "image": {
+    "bytes": 21467,
+    "compression_ratio": 6.491778077980156,
+    "expanded_bytes": 139359,
+    "heap_objects": 18,
+    "instructions_before_freeze": 120014,
+    "resource_records": 0
+  },
+  "memory": {
+    "max_rss_platform_units": 26792,
+    "vm_peak_traced_bytes_separate_untimed_run": 399812
+  },
+  "native_control": {
+    "median_seconds": 0.0010442700004205108,
+    "minimum_seconds": 0.0010214499998255633,
+    "samples_seconds": [
+      0.003066671000851784,
+      0.0010834320000867592,
+      0.0010442700004205108,
+      0.0010214499998255633,
+      0.0010241420004604151
+    ]
+  },
+  "runtime_slowdown_median": 149.79733108946658,
+  "safe_point_callback_ratio_median": 1.650641068731748,
+  "vm_control_with_request_path_polling": {
+    "median_seconds": 0.25820789899989904,
+    "minimum_seconds": 0.2426044189996901,
+    "samples_seconds": [
+      0.28165702799924475,
+      0.25820789899989904,
+      0.25465347800127347,
+      0.2426044189996901,
+      0.2926555779995397
+    ]
+  },
+  "vm_control_without_callback": {
+    "median_seconds": 0.15642885899978864,
+    "minimum_seconds": 0.14059329600058845,
+    "samples_seconds": [
+      0.14603733200056013,
+      0.15866740899946308,
+      0.14059329600058845,
+      0.15642885899978864,
+      0.16325085799871886
+    ]
+  },
+  "workload": {
+    "expected_answer": 333283335000,
+    "iterations": 10000,
+    "repetitions": 5
+  }
+}

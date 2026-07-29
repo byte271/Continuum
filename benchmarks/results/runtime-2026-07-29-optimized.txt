@@ -1,0 +1,53 @@
+         2440132 function calls in 1.196 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   480027    0.454    0.000    0.822    0.000 vm.py:341(_execute)
+        1    0.323    0.323    1.196    1.196 vm.py:277(run)
+   740047    0.081    0.000    0.081    0.000 {built-in method builtins.len}
+   320015    0.066    0.000    0.066    0.000 {method 'append' of 'list' objects}
+   240014    0.063    0.000    0.089    0.000 vm.py:667(_require_stack)
+   280015    0.060    0.000    0.060    0.000 {method 'pop' of 'list' objects}
+    20000    0.053    0.000    0.084    0.000 vm.py:583(_call_host)
+   160001    0.028    0.000    0.028    0.000 {built-in method builtins.isinstance}
+    40003    0.021    0.000    0.036    0.000 vm.py:672(_pop_many)
+    20000    0.013    0.000    0.013    0.000 <string>:2(__init__)
+    40000    0.009    0.000    0.009    0.000 {built-in method _operator.add}
+    20004    0.008    0.000    0.008    0.000 vm.py:650(_constant)
+    20001    0.005    0.000    0.005    0.000 {method 'items' of 'dict' objects}
+    20000    0.004    0.000    0.004    0.000 {built-in method _operator.mul}
+    20000    0.004    0.000    0.004    0.000 {built-in method builtins.getattr}
+    20001    0.004    0.000    0.004    0.000 {built-in method _operator.lt}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        1    0.000    0.000    0.000    0.000 vm.py:561(_call_function)
+        1    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+
+
+
+         2440132 function calls in 1.196 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.323    0.323    1.196    1.196 vm.py:277(run)
+   480027    0.454    0.000    0.822    0.000 vm.py:341(_execute)
+   240014    0.063    0.000    0.089    0.000 vm.py:667(_require_stack)
+    20000    0.053    0.000    0.084    0.000 vm.py:583(_call_host)
+   740047    0.081    0.000    0.081    0.000 {built-in method builtins.len}
+   320015    0.066    0.000    0.066    0.000 {method 'append' of 'list' objects}
+   280015    0.060    0.000    0.060    0.000 {method 'pop' of 'list' objects}
+    40003    0.021    0.000    0.036    0.000 vm.py:672(_pop_many)
+   160001    0.028    0.000    0.028    0.000 {built-in method builtins.isinstance}
+    20000    0.013    0.000    0.013    0.000 <string>:2(__init__)
+    40000    0.009    0.000    0.009    0.000 {built-in method _operator.add}
+    20004    0.008    0.000    0.008    0.000 vm.py:650(_constant)
+    20001    0.005    0.000    0.005    0.000 {method 'items' of 'dict' objects}
+    20000    0.004    0.000    0.004    0.000 {built-in method _operator.mul}
+    20000    0.004    0.000    0.004    0.000 {built-in method builtins.getattr}
+    20001    0.004    0.000    0.004    0.000 {built-in method _operator.lt}
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        1    0.000    0.000    0.000    0.000 vm.py:561(_call_function)
+        1    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+
+

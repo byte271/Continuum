@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "continuum-state"
+version = "0.1.1.dev0"
+description = "Portable continuation images for a controlled pure-Python runtime"
+readme = "README.md"
+requires-python = "==3.12.13"
+license = {text = "MIT"}
+authors = [{name = "Continuum contributors"}]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Programming Language :: Python :: 3.12",
+  "Operating System :: POSIX",
+]
+
+[project.scripts]
+continuum = "continuum.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["continuum*"]
