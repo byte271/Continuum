@@ -6,7 +6,7 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, BinaryIO, TextIO
 
 from .errors import ResourceError
@@ -18,6 +18,13 @@ def _sha256_file(path: Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def is_portable_absolute_path(value: str) -> bool:
+    return (
+        PurePosixPath(value).is_absolute()
+        or PureWindowsPath(value).is_absolute()
+    )
 
 
 @dataclass
@@ -317,7 +324,7 @@ class ResourceManager:
         if (
             not isinstance(record["original_path"], str)
             or "\x00" in record["original_path"]
-            or not Path(record["original_path"]).is_absolute()
+            or not is_portable_absolute_path(record["original_path"])
         ):
             raise ResourceError("invalid original file path")
         if record["mode"] not in {"r", "rt", "rb"}:

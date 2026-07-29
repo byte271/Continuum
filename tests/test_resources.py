@@ -11,6 +11,7 @@ from pathlib import Path
 from continuum.compiler import compile_source
 from continuum.errors import FrozenExecution, ResourceError
 from continuum.image import load_image, save_image
+from continuum.resources import is_portable_absolute_path
 from continuum.vm import VirtualMachine
 
 
@@ -36,6 +37,12 @@ result = work(__args__[1])
 
 
 class ResourceTests(unittest.TestCase):
+    def test_portable_absolute_paths_are_host_independent(self):
+        self.assertTrue(is_portable_absolute_path("/var/lib/continuum/data.txt"))
+        self.assertTrue(is_portable_absolute_path(r"C:\data\continuum.txt"))
+        self.assertTrue(is_portable_absolute_path(r"\\server\share\continuum.txt"))
+        self.assertFalse(is_portable_absolute_path("relative/data.txt"))
+
     def test_file_offset_and_random_state_survive_bundle(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

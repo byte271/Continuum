@@ -61,6 +61,36 @@ def replace_json_and_rehash(entries, name, document):
 
 
 class ImageTests(unittest.TestCase):
+    def test_new_image_declares_only_supported_platform_pairs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            image = make_live_image(Path(temporary))
+            loaded = load_image(image)
+
+        self.assertIn(
+            {"os": "Windows", "architecture": "x86_64"},
+            loaded.manifest["target_compatibility"]["platforms"],
+        )
+        self.assertNotIn(
+            {"os": "Windows", "architecture": "arm64"},
+            loaded.manifest["target_compatibility"]["platforms"],
+        )
+
+    def test_unsupported_windows_arm64_pair_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            image = make_live_image(Path(temporary))
+            loaded = load_image(image)
+            with (
+                patch("continuum.image.platform.system", return_value="Windows"),
+                patch(
+                    "continuum.image._normalized_architecture",
+                    return_value="arm64",
+                ),
+            ):
+                with self.assertRaisesRegex(
+                    ImageError, "target platform is unsupported"
+                ):
+                    loaded.validate_compatibility()
+
     def test_verify_deeply_checks_image_without_executing_program(self):
         with tempfile.TemporaryDirectory() as temporary:
             image = make_live_image(Path(temporary))

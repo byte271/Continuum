@@ -12,6 +12,9 @@ from typing import Any
 from .errors import ContinuumError, FrozenExecution
 from .image import save_image
 
+WINDOWS_REQUEST_POLL_INTERVAL_SECONDS = 0.01
+
+
 def continuum_home() -> Path:
     configured = os.environ.get("CONTINUUM_HOME")
     if configured:
@@ -67,6 +70,10 @@ def _create_json_exclusive(path: Path, value: dict[str, Any]) -> None:
             pass
 
 
+def _uses_signal_notifications() -> bool:
+    return os.name == "posix" and hasattr(signal, "SIGUSR1")
+
+
 class SessionController:
     def __init__(self, source: str, program: str):
         self.source = source
@@ -87,6 +94,8 @@ class SessionController:
         self.response_path = self.responses_dir / f"{self.session_id}.json"
         self.control_token = uuid.uuid4().hex
         self.freeze_requested = False
+        self._signal_notifications = _uses_signal_notifications()
+        self._next_request_poll = 0.0
         self._previous_signal_handler: Any = None
         self.record = {
             "session_id": self.session_id,
@@ -103,21 +112,32 @@ class SessionController:
         }
 
     def start(self) -> None:
-        try:
-            self._previous_signal_handler = signal.signal(
-                signal.SIGUSR1,
-                self._handle_freeze_signal,
-            )
-        except (ValueError, OSError) as exc:
-            raise ContinuumError(
-                "Continuum sessions must start on the main POSIX thread"
-            ) from exc
+        if self._signal_notifications:
+            try:
+                self._previous_signal_handler = signal.signal(
+                    signal.SIGUSR1,
+                    self._handle_freeze_signal,
+                )
+            except (ValueError, OSError) as exc:
+                raise ContinuumError(
+                    "Continuum sessions must start on the main POSIX thread"
+                ) from exc
         self.record["status"] = "running"
         self._write_record()
 
     def on_safe_point(self, vm: Any) -> None:
         if not self.freeze_requested:
-            return
+            if self._signal_notifications:
+                return
+            now = time.monotonic()
+            if now < self._next_request_poll:
+                return
+            self._next_request_poll = (
+                now + WINDOWS_REQUEST_POLL_INTERVAL_SECONDS
+            )
+            if not self.request_path.exists():
+                return
+            self.freeze_requested = True
         self.freeze_requested = False
         if not self.request_path.exists() or self.response_path.exists():
             return
@@ -177,7 +197,7 @@ class SessionController:
             self._previous_signal_handler = None
 
     def _handle_freeze_signal(self, signum: int, frame: Any) -> None:
-        if signum == signal.SIGUSR1:
+        if self._signal_notifications and signum == signal.SIGUSR1:
             self.freeze_requested = True
 
     def _write_record(self) -> None:
@@ -235,12 +255,15 @@ def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
         pid = record.get("pid")
         if not isinstance(pid, int) or pid <= 0:
             raise ContinuumError("session has no valid process identifier")
-        try:
-            os.kill(pid, signal.SIGUSR1)
-        except (ProcessLookupError, PermissionError, OSError) as exc:
-            raise ContinuumError(
-                f"cannot notify session process {pid}: {exc}"
-            ) from exc
+        if _uses_signal_notifications():
+            try:
+                os.kill(pid, signal.SIGUSR1)
+            except (ProcessLookupError, PermissionError, OSError) as exc:
+                raise ContinuumError(
+                    f"cannot notify session process {pid}: {exc}"
+                ) from exc
+        elif not _pid_exists(pid):
+            raise ContinuumError(f"session process {pid} is not running")
         deadline = time.monotonic() + 30
         response = None
         while time.monotonic() < deadline:
@@ -278,6 +301,8 @@ def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
 
 
 def _pid_exists(pid: int) -> bool:
+    if os.name == "nt":
+        return _windows_pid_exists(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -285,3 +310,43 @@ def _pid_exists(pid: int) -> bool:
     except PermissionError:
         return True
     return True
+
+
+def _windows_pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+    error_access_denied = 5
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [
+        wintypes.DWORD,
+        wintypes.BOOL,
+        wintypes.DWORD,
+    ]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(
+        process_query_limited_information,
+        False,
+        pid,
+    )
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)

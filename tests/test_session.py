@@ -109,7 +109,11 @@ while index < 10:
             self.assertTrue(second_image.exists())
             controller.finish("frozen")
 
-    def test_idle_safe_point_does_not_touch_the_filesystem(self):
+    @unittest.skipUnless(
+        os.name == "posix" and hasattr(signal, "SIGUSR1"),
+        "signal-notification behavior requires POSIX SIGUSR1",
+    )
+    def test_idle_signal_safe_point_does_not_touch_the_filesystem(self):
         source = "value = 1\n"
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ,
@@ -127,6 +131,10 @@ while index < 10:
             finally:
                 controller.finish("completed")
 
+    @unittest.skipUnless(
+        os.name == "posix" and hasattr(signal, "SIGUSR1"),
+        "signal notification requires POSIX SIGUSR1",
+    )
     def test_freeze_request_notifies_source_after_atomic_publication(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ,
@@ -158,6 +166,52 @@ while index < 10:
             self.assertEqual(observed["signal"], signal.SIGUSR1)
             self.assertTrue(observed["request_exists"])
             self.assertFalse(controller.request_path.exists())
+
+    def test_polling_notification_freezes_at_a_safe_point(self):
+        source = """
+index = 0
+while index < 10:
+    index += 1
+"""
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.dict(
+                os.environ,
+                {"CONTINUUM_HOME": str(Path(temporary) / "home")},
+            ),
+            patch("continuum.session._uses_signal_notifications", return_value=False),
+        ):
+            controller = SessionController(source, "polling.py")
+            controller.start()
+            vm = VirtualMachine(
+                compile_source(source, "polling.py"),
+                ["polling.py"],
+                "polling.py",
+            )
+            image = Path(temporary) / "polling.cont"
+            outcomes: list[BaseException | dict] = []
+
+            def request() -> None:
+                try:
+                    outcomes.append(
+                        request_freeze(controller.session_id, str(image))
+                    )
+                except BaseException as exc:
+                    outcomes.append(exc)
+
+            worker = threading.Thread(target=request)
+            worker.start()
+            self._wait_for(controller.request_path)
+            controller._next_request_poll = 0.0
+            with self.assertRaises(FrozenExecution):
+                controller.on_safe_point(vm)
+            worker.join(timeout=5)
+
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(len(outcomes), 1)
+            self.assertIsInstance(outcomes[0], dict)
+            self.assertTrue(image.exists())
+            controller.finish("frozen")
 
     @staticmethod
     def _wait_for(path: Path) -> None:

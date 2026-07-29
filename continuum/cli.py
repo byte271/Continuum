@@ -16,6 +16,7 @@ from . import IR_VERSION, SUPPORTED_PYTHON, __version__
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
 from .image import inspect_image, load_image, verify_image
+from .resources import is_portable_absolute_path
 from .session import (
     SessionController,
     continuum_home,
@@ -192,7 +193,7 @@ def _doctor(args: argparse.Namespace) -> int:
             f"Python {current_python} is incompatible; exact "
             f"CPython {SUPPORTED_PYTHON} is required"
         )
-    if current_system not in {"Linux", "Darwin"}:
+    if current_system not in {"Linux", "Darwin", "Windows"}:
         problems.append(f"unsupported operating system: {current_system}")
     if current_machine not in {"x86_64", "arm64"}:
         problems.append(f"unsupported architecture: {current_machine}")
@@ -235,6 +236,7 @@ def _doctor(args: argparse.Namespace) -> int:
             "Linux arm64",
             "macOS x86_64",
             "macOS arm64",
+            "Windows x86_64",
         ],
         "verified_migration": (
             "IR 0.2 Linux x86_64 -> macOS arm64 at "
@@ -622,7 +624,12 @@ def _resume(args: argparse.Namespace) -> int:
         old, new = mapping.split("=", 1)
         if not old or not new:
             raise ContinuumError(f"invalid relocation {mapping!r}; expected OLD=NEW")
-        relocations[str(Path(old).expanduser().resolve())] = str(
+        if not is_portable_absolute_path(old):
+            raise ContinuumError(
+                f"invalid relocation {mapping!r}; OLD must be an absolute "
+                "POSIX or Windows path"
+            )
+        relocations[old] = str(
             Path(new).expanduser().resolve()
         )
     loaded = load_image(args.image)

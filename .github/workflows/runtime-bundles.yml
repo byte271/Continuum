@@ -124,3 +124,93 @@ jobs:
             ${{ runner.temp }}/bundles/continuum-macos-arm64.tar.gz
             ${{ runner.temp }}/bundles/continuum-macos-arm64.tar.gz.sha256
           retention-days: 30
+
+  windows-x86_64:
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify clean native Windows source identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ((git rev-parse HEAD).Trim() -ne $env:GITHUB_SHA) {
+            throw "checked-out commit does not match GITHUB_SHA"
+          }
+          if (git status --porcelain=v1) {
+            throw "Git working tree is not clean"
+          }
+          if ($env:RUNNER_OS -ne "Windows" -or $env:RUNNER_ARCH -ne "X64") {
+            throw "runner is not native Windows X64"
+          }
+          $identity = python -c "import platform; print(platform.system()); print(platform.machine())"
+          if ($identity[0] -ne "Windows" -or $identity[1] -notin @("AMD64", "x86_64")) {
+            throw "runner Python does not report Windows x86_64"
+          }
+          Get-ComputerInfo |
+            Select-Object WindowsProductName, WindowsVersion, OsArchitecture, CsSystemType |
+            Format-List
+
+      - name: Build exact Windows x86_64 runtime bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & .\packaging\build_bundle_windows.ps1 `
+            -OutputParent "$env:RUNNER_TEMP\bundles"
+
+      - name: Test moved archive, continuation, and installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $archive = "$env:RUNNER_TEMP\bundles\continuum-windows-x86_64.zip"
+          $digest = ((Get-Content -LiteralPath "$archive.sha256" -Raw).Trim() -split "\s+")[0]
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $digest) {
+            throw "Windows bundle archive SHA-256 mismatch"
+          }
+          $extracted = "$env:RUNNER_TEMP\extracted"
+          Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+          $bundle = Join-Path $extracted "continuum-windows-x86_64"
+          & "$bundle\bin\continuum.cmd" doctor
+          if ($LASTEXITCODE -ne 0) {
+            throw "moved Windows bundle failed continuum doctor"
+          }
+          $env:PYTHONHOME = "$bundle\runtime"
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE"
+          & "$bundle\runtime\python.exe" -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) {
+            throw "complete Windows test suite failed"
+          }
+          Remove-Item Env:PYTHONHOME
+          Remove-Item Env:PYTHONPATH
+          $demo = "$env:RUNNER_TEMP\windows-continuation-evidence"
+          & "$bundle\bin\continuum.cmd" demo --output-dir $demo --iterations 5000
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows continuation demonstration failed"
+          }
+          & .\packaging\install.ps1 `
+            -Archive $archive `
+            -Sha256 $digest `
+            -Prefix "$env:RUNNER_TEMP\installed"
+          & "$env:RUNNER_TEMP\installed\bin\continuum.cmd" doctor
+          if ($LASTEXITCODE -ne 0) {
+            throw "installed Windows bundle failed continuum doctor"
+          }
+
+      - name: Upload Windows x86_64 bundle and evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: continuum-windows-x86_64-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/bundles/continuum-windows-x86_64.zip
+            ${{ runner.temp }}/bundles/continuum-windows-x86_64.zip.sha256
+            ${{ runner.temp }}/windows-continuation-evidence
+          retention-days: 30

@@ -150,8 +150,15 @@ def save_image(
             "python_version": _runtime_python(),
         },
         "target_compatibility": {
-            "operating_systems": ["Linux", "Darwin"],
+            "operating_systems": ["Linux", "Darwin", "Windows"],
             "architectures": ["x86_64", "arm64"],
+            "platforms": [
+                {"os": "Linux", "architecture": "x86_64"},
+                {"os": "Linux", "architecture": "arm64"},
+                {"os": "Darwin", "architecture": "x86_64"},
+                {"os": "Darwin", "architecture": "arm64"},
+                {"os": "Windows", "architecture": "x86_64"},
+            ],
             "python_version": SUPPORTED_PYTHON,
             "runtime_implementation": "continuum-vm",
             "runtime_version": __version__,
@@ -305,6 +312,14 @@ class LoadedImage:
             raise ImageError(f"target operating system is unsupported: {current_os}")
         if current_arch not in compatibility["architectures"]:
             raise ImageError(f"target architecture is unsupported: {current_arch}")
+        platforms = compatibility.get("platforms")
+        if platforms is not None and {
+            "os": current_os,
+            "architecture": current_arch,
+        } not in platforms:
+            raise ImageError(
+                f"target platform is unsupported: {current_os} {current_arch}"
+            )
         if _runtime_python() != compatibility["python_version"]:
             raise ImageError(
                 f"Python version mismatch: image requires "
@@ -494,6 +509,18 @@ def _validate_documents(
     unknown = set(capabilities) - SUPPORTED_CAPABILITIES
     if unknown:
         raise ImageError(f"unknown mandatory image capabilities: {sorted(unknown)}")
+    platforms = compatibility.get("platforms")
+    if platforms is not None and (
+        not isinstance(platforms, list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"os", "architecture"}
+            or not isinstance(item["os"], str)
+            or not isinstance(item["architecture"], str)
+            for item in platforms
+        )
+    ):
+        raise ImageError("invalid target platform compatibility list")
     if (
         not isinstance(runtime, dict)
         or runtime.get("runtime_implementation") != "continuum-vm"
