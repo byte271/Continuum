@@ -577,7 +577,11 @@ def _demo_marker_counts(content: bytes) -> tuple[int, int]:
 
 
 def _demo_final_hash(content: bytes) -> str | None:
-    matches = re.findall(rb"^FINAL ([0-9a-f]{64})$", content, re.MULTILINE)
+    matches = [
+        match.group(1)
+        for line in content.splitlines()
+        if (match := re.fullmatch(rb"FINAL ([0-9a-f]{64})", line))
+    ]
     if len(matches) != 1:
         return None
     return matches[0].decode("ascii")

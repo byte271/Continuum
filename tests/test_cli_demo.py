@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from continuum.cli import _demo_marker_counts
+from continuum.cli import _demo_final_hash, _demo_marker_counts
 
 
 class CliDemoTests(unittest.TestCase):
@@ -17,6 +17,7 @@ class CliDemoTests(unittest.TestCase):
             b"FINAL " + b"a" * 64 + b"\r\n"
         )
         self.assertEqual(_demo_marker_counts(content), (1, 1))
+        self.assertEqual(_demo_final_hash(content), "a" * 64)
 
     def test_demo_freezes_resumes_and_matches_control(self):
         repository = Path(__file__).resolve().parents[1]
