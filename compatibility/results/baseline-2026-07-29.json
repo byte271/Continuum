@@ -1,0 +1,2037 @@
+{
+  "format_version": 1,
+  "program_count": 50,
+  "python_version": "3.12.13",
+  "results": [
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/assignment_chained.py:1: unsupported syntax Assign (chained assignment)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 3,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/assignment_chained.py",
+      "performance_seconds": {
+        "cpython": 0.04416923299868358
+      },
+      "program": "assignment_chained",
+      "run": "not_run",
+      "runtime_features": [
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "Is",
+        "List"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/backtracking_subsets.py",
+      "performance_seconds": {
+        "compile": 0.0007836839977244381,
+        "continuum_uninterrupted": 0.0009176529965770897,
+        "cpython": 0.04471295899929828,
+        "new_process_resume": 0.1855650389989023,
+        "same_process_resume": 0.018649388999619987
+      },
+      "program": "backtracking_subsets",
+      "run": "passed",
+      "runtime_features": [
+        "function_frames",
+        "mutable_object_graph"
+      ],
+      "safe_points": 80,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "FunctionDef",
+        "If",
+        "List",
+        "Return",
+        "Subscript",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 6,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/bytes_hex_digest.py",
+      "performance_seconds": {
+        "compile": 0.0005081810013507493,
+        "continuum_uninterrupted": 0.00013263099754112773,
+        "cpython": 0.050838941999245435,
+        "new_process_resume": 0.263789798002108,
+        "same_process_resume": 0.026604546001181006
+      },
+      "program": "bytes_hex_digest",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 10,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "Call",
+        "For",
+        "List",
+        "Slice",
+        "Subscript"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/class_accumulator.py:1: unsupported syntax ClassDef",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 9,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/class_accumulator.py",
+      "performance_seconds": {
+        "cpython": 0.09660188599809771
+      },
+      "program": "class_accumulator",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames",
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "Call",
+        "ClassDef",
+        "For",
+        "FunctionDef",
+        "List",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/comparison_chained.py:4: unsupported syntax Compare (chained comparison)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/comparison_chained.py",
+      "performance_seconds": {
+        "cpython": 0.0690993480020552
+      },
+      "program": "comparison_chained",
+      "run": "not_run",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "For",
+        "List",
+        "Lt",
+        "USub",
+        "UnaryOp"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/comprehension_dict.py:1: unsupported syntax DictComp (expression)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 2,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/comprehension_dict.py",
+      "performance_seconds": {
+        "cpython": 0.05286044700187631
+      },
+      "program": "comprehension_dict",
+      "run": "not_run",
+      "runtime_features": [],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "BinOp",
+        "Call",
+        "DictComp",
+        "Mult",
+        "comprehension"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/comprehension_list.py:1: unsupported syntax ListComp (expression)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 2,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/comprehension_list.py",
+      "performance_seconds": {
+        "cpython": 0.07230019800044829
+      },
+      "program": "comprehension_list",
+      "run": "not_run",
+      "runtime_features": [],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "ListComp",
+        "Mod",
+        "Mult",
+        "comprehension"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/comprehension_set.py:1: unsupported syntax SetComp (expression)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 2,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/comprehension_set.py",
+      "performance_seconds": {
+        "cpython": 0.06137050200049998
+      },
+      "program": "comprehension_set",
+      "run": "not_run",
+      "runtime_features": [],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "BinOp",
+        "Call",
+        "Mod",
+        "SetComp",
+        "comprehension"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 14,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/control_nested_loops.py",
+      "performance_seconds": {
+        "compile": 0.0004937009980494622,
+        "continuum_uninterrupted": 0.0010068150004372,
+        "cpython": 0.0427751220013306,
+        "new_process_resume": 0.16255430199817056,
+        "same_process_resume": 0.01741172200127039
+      },
+      "program": "control_nested_loops",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 168,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "BinOp",
+        "Break",
+        "Call",
+        "Compare",
+        "Continue",
+        "Eq",
+        "Gt",
+        "If",
+        "List",
+        "Lt",
+        "Mod",
+        "Mult",
+        "Subscript",
+        "Tuple",
+        "USub",
+        "UnaryOp",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 9,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/control_try_finally.py",
+      "performance_seconds": {
+        "compile": 0.00041059800059883855,
+        "continuum_uninterrupted": 8.949099719757214e-05,
+        "cpython": 0.040557870001066476,
+        "new_process_resume": 0.16019381000296562,
+        "same_process_resume": 0.013552213004004443
+      },
+      "program": "control_try_finally",
+      "run": "passed",
+      "runtime_features": [
+        "exception_control_state",
+        "mutable_object_graph"
+      ],
+      "safe_points": 9,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "Call",
+        "List",
+        "Mult",
+        "Try"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 6,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/data_grouping.py",
+      "performance_seconds": {
+        "compile": 0.00046208599815145135,
+        "continuum_uninterrupted": 0.00027038400003220886,
+        "cpython": 0.0761142289993586,
+        "new_process_resume": 0.16749668400007067,
+        "same_process_resume": 0.02024662400071975
+      },
+      "program": "data_grouping",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 19,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Dict",
+        "For",
+        "List",
+        "Tuple"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/data_histogram.py",
+      "performance_seconds": {
+        "compile": 0.00036894100048812106,
+        "continuum_uninterrupted": 0.0001667989999987185,
+        "cpython": 0.0452689769990684,
+        "new_process_resume": 0.1656013210013043,
+        "same_process_resume": 0.01024866099760402
+      },
+      "program": "data_histogram",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 27,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Call",
+        "Dict",
+        "For",
+        "List",
+        "Subscript"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 8,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/data_rolling_average.py",
+      "performance_seconds": {
+        "compile": 0.00044620699918596074,
+        "continuum_uninterrupted": 0.00017184899843414314,
+        "cpython": 0.04407900099977269,
+        "new_process_resume": 0.15539751100368449,
+        "same_process_resume": 0.01094436900166329
+      },
+      "program": "data_rolling_average",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 17,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Div",
+        "List",
+        "LtE",
+        "Slice",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/default_clamp_bounds.py:1: default parameters are unsupported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 7,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/default_clamp_bounds.py",
+      "performance_seconds": {
+        "cpython": 0.04106093000154942
+      },
+      "program": "default_clamp_bounds",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Call",
+        "Compare",
+        "FunctionDef",
+        "Gt",
+        "If",
+        "Lt",
+        "Return",
+        "USub",
+        "UnaryOp",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/default_memo_fibonacci.py:1: default parameters are unsupported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 8,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/default_memo_fibonacci.py",
+      "performance_seconds": {
+        "cpython": 0.045824576998711564
+      },
+      "program": "default_memo_fibonacci",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Dict",
+        "FunctionDef",
+        "If",
+        "In",
+        "Lt",
+        "Return",
+        "Sub",
+        "Subscript",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/default_parser_separator.py:1: default parameters are unsupported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 4,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/default_parser_separator.py",
+      "performance_seconds": {
+        "cpython": 0.04373716799818794
+      },
+      "program": "default_parser_separator",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "FunctionDef",
+        "Return",
+        "Subscript",
+        "Tuple",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/dynamic_coin_change.py",
+      "performance_seconds": {
+        "compile": 0.0009766500006662682,
+        "continuum_uninterrupted": 0.001530833000288112,
+        "cpython": 0.04051298899867106,
+        "new_process_resume": 0.15462113399917143,
+        "same_process_resume": 0.6318932520007365
+      },
+      "program": "dynamic_coin_change",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 188,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "For",
+        "If",
+        "List",
+        "LtE",
+        "Mult",
+        "Sub",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 20,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/dynamic_lcs.py",
+      "performance_seconds": {
+        "compile": 0.0007816509969416074,
+        "continuum_uninterrupted": 0.0028458479973778594,
+        "cpython": 0.041517754001688445,
+        "new_process_resume": 0.1625903929998458,
+        "same_process_resume": 0.019780085000093095
+      },
+      "program": "dynamic_lcs",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 321,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "If",
+        "List",
+        "LtE",
+        "Mult",
+        "Sub",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/exception_handler.py:4: unsupported syntax Try (only try/finally is supported)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 8,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/exception_handler.py",
+      "performance_seconds": {
+        "cpython": 0.041992236001533456
+      },
+      "program": "exception_handler",
+      "run": "not_run",
+      "runtime_features": [
+        "exception_control_state",
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "ExceptHandler",
+        "For",
+        "List",
+        "Try",
+        "USub",
+        "UnaryOp"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/fstring_conversion.py:2: unsupported syntax FormattedValue (f-string conversion)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 2,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/fstring_conversion.py",
+      "performance_seconds": {
+        "cpython": 0.04384618599942769
+      },
+      "program": "fstring_conversion",
+      "run": "not_run",
+      "runtime_features": [
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Call",
+        "Dict",
+        "FormattedValue",
+        "JoinedStr",
+        "List"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/graph_breadth_first.py",
+      "performance_seconds": {
+        "compile": 0.0004919290004181676,
+        "continuum_uninterrupted": 0.00021577499865088612,
+        "cpython": 0.044010456000251,
+        "new_process_resume": 0.1843075319993659,
+        "same_process_resume": 0.018803848000970902
+      },
+      "program": "graph_breadth_first",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 30,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "Dict",
+        "If",
+        "List",
+        "NotIn",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 13,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/graph_depth_first.py",
+      "performance_seconds": {
+        "compile": 0.000542124002095079,
+        "continuum_uninterrupted": 0.0002656680007930845,
+        "cpython": 0.04902469399894471,
+        "new_process_resume": 0.16738890499982517,
+        "same_process_resume": 0.011114558001281694
+      },
+      "program": "graph_depth_first",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 42,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "Dict",
+        "If",
+        "List",
+        "NotIn",
+        "Slice",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/graph_shared_cycle.py",
+      "performance_seconds": {
+        "compile": 0.0004592180011968594,
+        "continuum_uninterrupted": 8.752800204092637e-05,
+        "cpython": 0.04284732599990093,
+        "new_process_resume": 0.1505334909998055,
+        "same_process_resume": 0.013319419998879312
+      },
+      "program": "graph_shared_cycle",
+      "run": "passed",
+      "runtime_features": [
+        "mutable_object_graph"
+      ],
+      "safe_points": 5,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "Dict",
+        "Is",
+        "List",
+        "Subscript"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/hash_rolling.py",
+      "performance_seconds": {
+        "compile": 0.0002941730017482769,
+        "continuum_uninterrupted": 0.00022403800176107325,
+        "cpython": 0.040861132998543326,
+        "new_process_resume": 0.1493768709988217,
+        "same_process_resume": 0.023749941999994917
+      },
+      "program": "hash_rolling",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points"
+      ],
+      "safe_points": 30,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "BitXor",
+        "Call",
+        "For",
+        "Mod",
+        "Mult"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "unhandled UnsupportedObjectError at /workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/hash_sha256_chunks.py:4: unsupported live object: _hashlib.HASH",
+        "stage": "same_process"
+      },
+      "freezes": "failed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "not_run",
+      "path": "compatibility/programs/hash_sha256_chunks.py",
+      "performance_seconds": {
+        "compile": 0.0003826449974440038,
+        "continuum_uninterrupted": 0.00013783100075670518,
+        "cpython": 0.04553641299935407
+      },
+      "program": "hash_sha256_chunks",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph",
+        "stdlib:hashlib"
+      ],
+      "safe_points": 12,
+      "same_process": "failed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "For",
+        "Import",
+        "List",
+        "alias"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "continuum_error",
+        "message": "unhandled TypeError at /workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/iteration_dictionary.py:3: v0.1 cannot checkpoint iteration over dict_items",
+        "stage": "run"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/iteration_dictionary.py",
+      "performance_seconds": {
+        "compile": 0.0003814689989667386,
+        "cpython": 0.039534183000796475
+      },
+      "program": "iteration_dictionary",
+      "run": "failed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Call",
+        "Dict",
+        "For",
+        "List",
+        "Tuple"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 7,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/json_aggregate.py",
+      "performance_seconds": {
+        "compile": 0.0004301870030758437,
+        "continuum_uninterrupted": 0.0001727050002955366,
+        "cpython": 0.05664469000112149,
+        "new_process_resume": 0.14774674000000232,
+        "same_process_resume": 0.010909069998888299
+      },
+      "program": "json_aggregate",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph",
+        "stdlib:json"
+      ],
+      "safe_points": 16,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Call",
+        "Dict",
+        "For",
+        "Import",
+        "Subscript",
+        "alias"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/json_transform.py",
+      "performance_seconds": {
+        "compile": 0.00031308200050261803,
+        "continuum_uninterrupted": 0.00011734999861801043,
+        "cpython": 0.0555836060011643,
+        "new_process_resume": 0.173214016998827,
+        "same_process_resume": 0.015043719002278522
+      },
+      "program": "json_transform",
+      "run": "passed",
+      "runtime_features": [
+        "stdlib:json"
+      ],
+      "safe_points": 5,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Import",
+        "Subscript",
+        "alias"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "continuum_error",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/keyword_only_format.py:1: only positional parameters are supported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 3,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/keyword_only_format.py",
+      "performance_seconds": {
+        "cpython": 0.04331053300120402
+      },
+      "program": "keyword_only_format",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "BinOp",
+        "Call",
+        "FunctionDef",
+        "Return",
+        "arg",
+        "arguments",
+        "keyword"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "continuum_error",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/kwargs_merge.py:1: only positional parameters are supported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 3,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/kwargs_merge.py",
+      "performance_seconds": {
+        "cpython": 0.04072158899725764
+      },
+      "program": "kwargs_merge",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Call",
+        "FunctionDef",
+        "Return",
+        "arg",
+        "arguments",
+        "keyword"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 18,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/math_matrix_multiply.py",
+      "performance_seconds": {
+        "compile": 0.0006272260034165811,
+        "continuum_uninterrupted": 0.000395064998883754,
+        "cpython": 0.044126291999418754,
+        "new_process_resume": 0.15142519399887533,
+        "same_process_resume": 0.01250807500036899
+      },
+      "program": "math_matrix_multiply",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 71,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "List",
+        "Lt",
+        "Mult",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 10,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/math_primes.py",
+      "performance_seconds": {
+        "compile": 0.00038879700150573626,
+        "continuum_uninterrupted": 0.003681854999740608,
+        "cpython": 0.03972470299777342,
+        "new_process_resume": 0.14901020400066045,
+        "same_process_resume": 0.014923090999218402
+      },
+      "program": "math_primes",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 1133,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Break",
+        "Call",
+        "Compare",
+        "Eq",
+        "For",
+        "If",
+        "List",
+        "Mod"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 6,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/math_statistics.py",
+      "performance_seconds": {
+        "compile": 0.0004690220011980273,
+        "continuum_uninterrupted": 0.00013977799972053617,
+        "cpython": 0.04249411199998576,
+        "new_process_resume": 0.144943962997786,
+        "same_process_resume": 0.010700988001190126
+      },
+      "program": "math_statistics",
+      "run": "passed",
+      "runtime_features": [
+        "mutable_object_graph"
+      ],
+      "safe_points": 6,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "BinOp",
+        "Call",
+        "Div",
+        "FloorDiv",
+        "List",
+        "Sub",
+        "Subscript"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/random_walk.py",
+      "performance_seconds": {
+        "compile": 0.00042073900112882257,
+        "continuum_uninterrupted": 0.0008869999983289745,
+        "cpython": 0.04362212599880877,
+        "new_process_resume": 0.16309109700159752,
+        "same_process_resume": 0.014881538998452015
+      },
+      "program": "random_walk",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph",
+        "stdlib:random"
+      ],
+      "safe_points": 165,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "Call",
+        "Compare",
+        "Eq",
+        "For",
+        "If",
+        "Import",
+        "List",
+        "Sub",
+        "alias"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/recursion_factorial.py",
+      "performance_seconds": {
+        "compile": 0.0002938290017482359,
+        "continuum_uninterrupted": 0.0001582910008437466,
+        "cpython": 0.05310417399959988,
+        "new_process_resume": 0.15256546399541548,
+        "same_process_resume": 0.010934739002550486
+      },
+      "program": "recursion_factorial",
+      "run": "passed",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "safe_points": 2,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "BinOp",
+        "Call",
+        "Compare",
+        "FunctionDef",
+        "If",
+        "Lt",
+        "Mult",
+        "Return",
+        "Sub",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/recursion_fibonacci.py",
+      "performance_seconds": {
+        "compile": 0.00033182799961650744,
+        "continuum_uninterrupted": 0.003670369002065854,
+        "cpython": 0.04663166899990756,
+        "new_process_resume": 0.15742909600157873,
+        "same_process_resume": 0.027435413001512643
+      },
+      "program": "recursion_fibonacci",
+      "run": "passed",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "safe_points": 2,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "BinOp",
+        "Call",
+        "Compare",
+        "FunctionDef",
+        "If",
+        "Lt",
+        "Return",
+        "Sub",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 9,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/recursion_mutual.py",
+      "performance_seconds": {
+        "compile": 0.0004161910001130309,
+        "continuum_uninterrupted": 0.00038333400152623653,
+        "cpython": 0.04087297899968689,
+        "new_process_resume": 0.15540043200235232,
+        "same_process_resume": 0.01132162600333686
+      },
+      "program": "recursion_mutual",
+      "run": "passed",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "safe_points": 3,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "BinOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "FunctionDef",
+        "If",
+        "Return",
+        "Sub",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 15,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/search_binary.py",
+      "performance_seconds": {
+        "compile": 0.0007507449990953319,
+        "continuum_uninterrupted": 9.382900316268206e-05,
+        "cpython": 0.06325299700256437,
+        "new_process_resume": 0.15159176000088337,
+        "same_process_resume": 0.011011416998371715
+      },
+      "program": "search_binary",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 11,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "BinOp",
+        "Break",
+        "Call",
+        "Compare",
+        "Eq",
+        "FloorDiv",
+        "If",
+        "List",
+        "Lt",
+        "LtE",
+        "Sub",
+        "Subscript",
+        "USub",
+        "UnaryOp",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 10,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/search_linear.py",
+      "performance_seconds": {
+        "compile": 0.00038149099782458507,
+        "continuum_uninterrupted": 0.00011343100049998611,
+        "cpython": 0.04097364300105255,
+        "new_process_resume": 0.17493211499822792,
+        "same_process_resume": 0.011672478995023994
+      },
+      "program": "search_linear",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 14,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "AugAssign",
+        "Break",
+        "Call",
+        "Compare",
+        "Eq",
+        "If",
+        "List",
+        "Lt",
+        "Subscript",
+        "USub",
+        "UnaryOp",
+        "While"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/simulation_inventory.py:6: unsupported syntax AugAssign (augmented assignment to non-name)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 8,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/simulation_inventory.py",
+      "performance_seconds": {
+        "cpython": 0.05814990600265446
+      },
+      "program": "simulation_inventory",
+      "run": "not_run",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "Call",
+        "Compare",
+        "Dict",
+        "For",
+        "GtE",
+        "If",
+        "List",
+        "Sub",
+        "Subscript",
+        "Tuple"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 12,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/sort_bubble.py",
+      "performance_seconds": {
+        "compile": 0.0005068590035079978,
+        "continuum_uninterrupted": 0.0007591719986521639,
+        "cpython": 0.04042784000193933,
+        "new_process_resume": 0.14779045100294752,
+        "same_process_resume": 0.011581333001231542
+      },
+      "program": "sort_bubble",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 159,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "Gt",
+        "If",
+        "List",
+        "Lt",
+        "Sub",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/sort_insertion.py",
+      "performance_seconds": {
+        "compile": 0.00048110900024767034,
+        "continuum_uninterrupted": 0.0002462390002619941,
+        "cpython": 0.04063226500147721,
+        "new_process_resume": 0.18895181700281682,
+        "same_process_resume": 0.010731547001341823
+      },
+      "program": "sort_insertion",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 46,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "And",
+        "Assign",
+        "AugAssign",
+        "BinOp",
+        "BoolOp",
+        "Call",
+        "Compare",
+        "Gt",
+        "GtE",
+        "List",
+        "Lt",
+        "Sub",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 14,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/sort_selection.py",
+      "performance_seconds": {
+        "compile": 0.0005232360017544124,
+        "continuum_uninterrupted": 0.0003005700018547941,
+        "cpython": 0.041371147002791986,
+        "new_process_resume": 0.1462834890007798,
+        "same_process_resume": 0.010857978999410989
+      },
+      "program": "sort_selection",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 63,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "AugAssign",
+        "BinOp",
+        "Call",
+        "Compare",
+        "If",
+        "List",
+        "Lt",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "unsupported_language_or_runtime",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/starred_call.py:6: unsupported syntax Call (starred call arguments)",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 4,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/starred_call.py",
+      "performance_seconds": {
+        "cpython": 0.05542157699892414
+      },
+      "program": "starred_call",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames",
+        "mutable_object_graph"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "BinOp",
+        "Call",
+        "FunctionDef",
+        "List",
+        "Mult",
+        "Return",
+        "Starred",
+        "arg",
+        "arguments"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 11,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/text_bracket_balance.py",
+      "performance_seconds": {
+        "compile": 0.0003869110005325638,
+        "continuum_uninterrupted": 0.0001569460000609979,
+        "cpython": 0.0538625109984423,
+        "new_process_resume": 0.14890672899855417,
+        "same_process_resume": 0.011190998997335555
+      },
+      "program": "text_bracket_balance",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points"
+      ],
+      "safe_points": 34,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "And",
+        "Assign",
+        "AugAssign",
+        "BoolOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "For",
+        "If",
+        "Lt",
+        "Sub"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 3,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/text_normalize.py",
+      "performance_seconds": {
+        "compile": 0.0003847450025205035,
+        "continuum_uninterrupted": 9.702500028652139e-05,
+        "cpython": 0.059566042000369634,
+        "new_process_resume": 0.1734645550022833,
+        "same_process_resume": 0.010757256000943016
+      },
+      "program": "text_normalize",
+      "run": "passed",
+      "runtime_features": [],
+      "safe_points": 3,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 6,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/text_palindrome_scan.py",
+      "performance_seconds": {
+        "compile": 0.00043780300256912597,
+        "continuum_uninterrupted": 0.0002740519994404167,
+        "cpython": 0.0487272460013628,
+        "new_process_resume": 0.18356863100052578,
+        "same_process_resume": 0.015343721999670379
+      },
+      "program": "text_palindrome_scan",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 16,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Assign",
+        "Attribute",
+        "Call",
+        "Compare",
+        "Eq",
+        "For",
+        "If",
+        "List",
+        "Slice",
+        "Subscript",
+        "USub",
+        "UnaryOp"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 10,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/text_run_length.py",
+      "performance_seconds": {
+        "compile": 0.0005124099989188835,
+        "continuum_uninterrupted": 0.00026565100051811896,
+        "cpython": 0.04149789700022666,
+        "new_process_resume": 0.14865693200044916,
+        "same_process_resume": 0.011877601999003673
+      },
+      "program": "text_run_length",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 32,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "And",
+        "Assign",
+        "Attribute",
+        "AugAssign",
+        "BinOp",
+        "BoolOp",
+        "Call",
+        "Compare",
+        "Eq",
+        "List",
+        "Lt",
+        "Sub",
+        "Subscript",
+        "While"
+      ]
+    },
+    {
+      "compile": "passed",
+      "cp_python_output_match": true,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": null,
+      "freezes": "passed",
+      "license": "MIT",
+      "lines_of_code": 5,
+      "matches_cpython": true,
+      "new_process": "passed",
+      "path": "compatibility/programs/text_word_frequency.py",
+      "performance_seconds": {
+        "compile": 0.0003246060005039908,
+        "continuum_uninterrupted": 0.0001508409986854531,
+        "cpython": 0.04387960800158908,
+        "new_process_resume": 0.16624484999920242,
+        "same_process_resume": 0.011300895999738714
+      },
+      "program": "text_word_frequency",
+      "run": "passed",
+      "runtime_features": [
+        "loop_safe_points",
+        "mutable_object_graph"
+      ],
+      "safe_points": 21,
+      "same_process": "passed",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Add",
+        "Assign",
+        "Attribute",
+        "BinOp",
+        "Call",
+        "Dict",
+        "For",
+        "Subscript"
+      ]
+    },
+    {
+      "compile": "failed",
+      "cp_python_output_match": false,
+      "cpython_stderr": "",
+      "cross_platform": "not_run",
+      "failure": {
+        "category": "continuum_error",
+        "message": "/workspace/scratch/6b43857914f9/continuum-validation-run2/compatibility/programs/varargs_total.py:1: only positional parameters are supported",
+        "stage": "compile"
+      },
+      "freezes": "not_run",
+      "license": "MIT",
+      "lines_of_code": 3,
+      "matches_cpython": false,
+      "new_process": "not_run",
+      "path": "compatibility/programs/varargs_total.py",
+      "performance_seconds": {
+        "cpython": 0.043520432998775505
+      },
+      "program": "varargs_total",
+      "run": "not_run",
+      "runtime_features": [
+        "function_frames"
+      ],
+      "same_process": "not_run",
+      "source": "Continuum project compatibility corpus",
+      "syntax_features": [
+        "Call",
+        "FunctionDef",
+        "Return",
+        "arg",
+        "arguments"
+      ]
+    }
+  ]
+}
