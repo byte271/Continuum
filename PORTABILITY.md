@@ -48,14 +48,25 @@ implementation and can still have platform-specific behavior.
 | Current Linux x86_64 process | New process on same Linux x86_64 host | verified |
 | Current Linux x86_64 process | Linux x86_64 dry-run of cross-platform package | verified; 6,603 combined output lines exactly matched uninterrupted control |
 | Linux x86_64 host | Second native Linux x86_64 environment | unverified |
-| GitHub-hosted Linux x86_64 VM | Native GitHub-hosted macOS arm64 | unverified |
-| Any native cross-architecture pair | Any | unverified |
+| Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
+| Any other native cross-architecture pair | Any | unverified |
 
-The Linux source half generated
-`artifacts/cross-platform-linux-dry-run-2/linux-x86_64.cont`, recorded its
-SHA-256, terminated the source PID, deleted the original input path, resumed
-from the bundle in a new Linux process, and matched a control run. This is not
-counted as cross-OS or cross-architecture proof.
+The verified run is
+[GitHub Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+at commit `15bceefece050d06a1f504244a77434e31fd5228`. Its Linux
+source job ran on `ubuntu-24.04`; its dependent target job ran on `macos-26`
+and recorded Darwin `arm64`, Apple M1, and
+`sysctl.proc_translated=0`. Both jobs independently built exact CPython
+3.12.13 from the same official source hash.
+
+The continuation image SHA-256 was
+`5a72261f61a3df2b71aec6882d3dbfc31196813a1bbfa5438cd9e9d069f324b9`
+at source, after artifact transfer, before target resume, and after target
+resume. The source stopped after iteration 64 and the target continued at
+iteration 65 in a new process. Four frames, one operand item, one control
+block, shared references, a cycle, RNG state, and a bundled read-only file at
+offset 154 were restored. The 6,605 combined output lines matched the
+uninterrupted control byte for byte and no irreversible action was duplicated.
 
 ## Validation package
 
@@ -71,8 +82,10 @@ See `validation/cross_platform/README.md`. The source and target scripts:
 - reject duplicate irreversible action records;
 - compare final deterministic hashes.
 
-No Apple Silicon host is available in the current environment, so
-`target-evidence.json` has not been produced.
+The successful run produced both `target-evidence.json` and a verified
+`final-evidence.sha256` manifest. The Linux and final Actions artifacts remain
+attached to the exact workflow run. This result does not generalize beyond the
+tested program, runtime version, resources, or platform pair.
 
 ## Remaining host assumptions
 

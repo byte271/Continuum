@@ -22,7 +22,7 @@
 | Runtime incompatibility | Incompatible metadata test |
 | Unsupported objects | Checkpoint rejection and retry tests |
 | Final result equals uninterrupted run | Demo and adversarial final-hash tests |
-| Linux x86_64 to macOS arm64 | Manual test/package only; skipped/unverified |
+| Linux x86_64 to macOS arm64 | Actions run 30489463484; 26/26 proof conditions passed |
 | No Linux code/pointers | Archive payload test plus explicit JSON format |
 | Source exits and target is new PID | Process-independent and adversarial tests |
 
@@ -38,10 +38,12 @@ Raw untouched-baseline and final verification logs are under `artifacts/`.
 
 ## Real cross-platform protocol
 
-Use `validation/cross_platform/README.md`. The Linux script has been exercised
-on the current x86_64 environment, including bundled-input deletion and a
-same-host new-process control comparison. The macOS script has not run because
-no native Apple Silicon runner has completed the validation.
+Use `validation/cross_platform/README.md`. The complete workflow passed in
+[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+at commit `15bceefece050d06a1f504244a77434e31fd5228`. The source
+ran in a native x86_64 Linux GitHub-hosted VM and the unchanged image resumed
+in a new native process on a GitHub-hosted Apple Silicon macOS arm64 runner.
+All 26 proof conditions and the final evidence manifest passed.
 
 Passing only manifest checks, containers, emulation, mocked platform strings,
 or this Linux dry run does not satisfy cross-platform acceptance.

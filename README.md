@@ -1,32 +1,49 @@
 # Continuum
 
-Continuum saves the live execution state of supported Python programs and
-restores it in a new runtime.
+[![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/runs/30489463484)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-The current prototype is deliberately narrow. It automatically compiles a
-pure-Python subset into a portable stack-machine IR. At a safe point it writes
-the active Continuum frames, logical instruction positions, operand stacks,
-locals, module globals, reachable heap graph, random state, and supported file
-resources into a `.cont` image. Resume starts a new process and continues the
-stored frames. It does not rerun the source file.
+Continuum pauses a supported Python program on Linux x86_64 and resumes the
+same live execution state in a new process on Apple Silicon macOS arm64.
 
-What has actually been verified:
+Continuum currently compiles a controlled pure-Python subset into a portable
+explicit-stack runtime. It does not migrate arbitrary CPython processes or
+native machine state.
 
-- same-machine suspension and continuation on Linux x86_64;
-- source-process exit followed by resume in a different process;
-- four active nested frames with preserved locals and logical PCs;
-- an external fsyncing auditor observed no repeated entry action, function
-  prologue, or completed loop action after new-process resume;
-- shared references, cycles, module globals, RNG state, and read-only file
-  offsets;
-- ZIP entry bounds, SHA-256 integrity checks, and incompatible-version
-  rejection.
-- malformed graph and resource records, altered IR identity, unknown mandatory
-  capabilities, truncated archives, and failed-checkpoint retry.
+```console
+# Linux x86_64
+$ python3 -m continuum run --file-policy bundle examples/demo.py examples/demo_input.txt 200000
+Continuum session: cont-a84c9f31b012
+$ python3 -m continuum freeze cont-a84c9f31b012 -o process.cont
 
-Linux x86_64 to macOS ARM64 restoration has **not** been tested yet. The image
-contains no Linux machine code or native pointers, but that is a design
-property, not proof of a successful cross-platform run. See [STATUS.md](STATUS.md).
+# Copy process.cont unchanged to Apple Silicon macOS
+$ python3 -m continuum resume process.cont --file-policy bundle
+Restored from Linux x86_64.
+```
+
+## Verified cross-platform proof
+
+- Run: [30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+- Commit: [`15bceefece050d06a1f504244a77434e31fd5228`](https://github.com/byte271/Continuum/commit/15bceefece050d06a1f504244a77434e31fd5228)
+- Source: native x86_64 Linux GitHub-hosted VM
+- Target: native Apple Silicon macOS arm64 GitHub-hosted runner
+- Runtime: CPython 3.12.13, built independently from the same verified source
+- Conditions: 26/26 passed
+- Image SHA-256: `5a72261f61a3df2b71aec6882d3dbfc31196813a1bbfa5438cd9e9d069f324b9`
+
+The source process exited and was reaped before the target job started. The
+target resumed the unchanged image in a new process at iteration 65 after the
+source stopped at iteration 64. Four active frames, locals, logical PCs, an
+operand item, control state, shared references, a cycle, RNG state, and a
+bundled file at a nonzero offset survived. The 6,605 combined output lines and
+final result hash matched an uninterrupted control run byte for byte, with no
+repeated completed action. See [PORTABILITY.md](PORTABILITY.md) and the
+[validation protocol](validation/cross_platform/README.md).
+
+The verified scope remains narrow: CPython 3.12.13 exactly, one thread, a
+controlled language subset, Continuum safe points, and read-only regular
+files. Classes, closures, generators, native extensions, subprocesses,
+sockets, writable files, and arbitrary CPython frames are unsupported.
 
 ## Why this is a real continuation
 
@@ -62,7 +79,7 @@ The exact patch version is intentional while the image and IR are unstable.
 
 ## Run
 
-From the repository:
+From a checkout of the repository:
 
 ```bash
 python3 -m continuum run --file-policy bundle \

@@ -4,6 +4,16 @@ Updated: 2026-07-29
 
 ## WORKING
 
+- Verified cross-platform continuation from a native x86_64 Linux
+  GitHub-hosted VM to a native Apple Silicon macOS arm64 GitHub-hosted runner.
+  Actions run
+  [30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+  passed 26/26 proof conditions at commit
+  `15bceefece050d06a1f504244a77434e31fd5228`.
+- The verified source process exited and was reaped before a new target
+  process resumed the unchanged image. Source/transfer/target image hashes
+  were identical; source-plus-target output and the final result hash matched
+  the uninterrupted control.
 - CPython 3.12.13 source-subset compilation into Continuum IR 0.2.
 - Explicit frames, next logical PCs, locals, operand stacks, module globals,
   and supported `try/finally` control state.
@@ -56,15 +66,11 @@ Updated: 2026-07-29
   security sandbox.
 - Python versions other than 3.12.13.
 
-## UNVERIFIED ON REAL HARDWARE
+## UNVERIFIED
 
-- Linux x86_64 to Apple Silicon macOS arm64 continuation.
-- Any cross-architecture or cross-operating-system continuation.
 - Resume in a second native Linux x86_64 environment or after an actual reboot.
 - Native macOS resource behavior and directory durability.
-- The prepared package in `validation/cross_platform/` has passed its Linux
-  source and same-host control dry run only. No target evidence was generated.
-- `.github/workflows/cross-platform-proof.yml` now defines the required
-  `ubuntu-24.04` source and dependent `macos-26` target jobs, but it has not
-  been dispatched because this checkout has no GitHub remote or authenticated
-  GitHub CLI. No workflow URL, run ID, or Actions artifact exists yet.
+- Any source/target platform pair other than the verified GitHub-hosted Linux
+  x86_64 to Apple Silicon macOS arm64 pair.
+- Cross-platform restoration for programs or resources outside the exact
+  verified controlled subset.

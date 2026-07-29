@@ -1,8 +1,11 @@
 # Implementation audit
 
-Audited on 2026-07-29 using Linux x86_64 and CPython 3.12.13. The workspace is
-not a Git repository: `git status` returned “not a git repository.” No commit
-identity can be claimed for this artifact.
+Audited on 2026-07-29 using Linux x86_64 and CPython 3.12.13. The repository
+was subsequently published and the cross-platform proof was completed at
+commit `15bceefece050d06a1f504244a77434e31fd5228` in
+[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484).
+The historical untouched-baseline note below describes the original imported
+workspace, not the current repository identity.
 
 ## Untouched baseline
 
@@ -100,8 +103,8 @@ or individual arithmetic opcode. A request at those points is delayed.
 
 ## Remaining high-risk gaps
 
-- No second native CPU architecture or operating system has resumed an
-  image.
+- Only one native cross-platform pair and one proof workload have been
+  verified. Broader program and resource portability remains unmeasured.
 - Failure injection does not yet cover every ZIP write, fsync, checksum write,
   and rename boundary.
 - `inspect` validates hashes and document schemas but does not fully decode the

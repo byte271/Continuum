@@ -65,6 +65,9 @@ Write modes, mmap, pipes, devices, sockets, and directory handles are rejected.
 ## Portability
 
 Images intentionally contain JSON, source, bundled data, and ZIP metadata—no
-native code or pointers. Real Linux x86_64 to macOS ARM64 execution remains
-unverified because this development environment has no Apple Silicon host.
-See [STATUS.md](STATUS.md).
+native code or pointers. Native Linux x86_64 to Apple Silicon macOS arm64
+continuation was verified for the controlled proof workload in
+[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484).
+That single platform pair and workload do not establish portability for other
+programs, resources, operating systems, architectures, or Python versions.
+See [STATUS.md](STATUS.md) and [PORTABILITY.md](PORTABILITY.md).

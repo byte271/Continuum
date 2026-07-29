@@ -4,6 +4,13 @@ These scripts are the only accepted cross-platform validation path. They do
 not change Continuum compatibility checks, recompile the application during
 resume, or rewrite the `.cont` image.
 
+The first complete proof passed in
+[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+at commit `15bceefece050d06a1f504244a77434e31fd5228`. The native
+Linux x86_64 source job and native Apple Silicon macOS arm64 target job passed
+all 26 conditions. The unchanged image SHA-256 was
+`5a72261f61a3df2b71aec6882d3dbfc31196813a1bbfa5438cd9e9d069f324b9`.
+
 ## 1. Prepare the source repository
 
 Use a real Git repository containing the exact Continuum source:
@@ -163,6 +170,8 @@ complete `linux-evidence.sha256` set—whose source evidence is written only
 after the source process exits and is reaped—before it creates the new target
 process.
 
-No `target-evidence.json`, successful 26-condition `comparison.json`, and
-verified `final-evidence.sha256` means cross-platform restoration remains
-unverified.
+A future run is successful only when it produces `target-evidence.json`, a
+26-condition `comparison.json` whose values are all true, and a verified
+`final-evidence.sha256`. Absence or failure of any of those files means that
+specific run is not verified; it does not invalidate the immutable successful
+baseline run above.
