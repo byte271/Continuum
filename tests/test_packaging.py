@@ -41,6 +41,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("cpython-3.12.13.sha256", builder)
         self.assertIn('18 { "v145" }', builder)
         self.assertIn("/p:PlatformToolset=$PlatformToolset", builder)
+        self.assertIn("PCbuild\\msbuild.rsp", builder)
         self.assertIn("0x8664", builder)
         self.assertIn("Get-FileHash -Algorithm SHA256", installer)
         self.assertIn("duplicate Windows archive member", installer)

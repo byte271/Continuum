@@ -67,8 +67,13 @@ try {
     }
 
     $BuildScript = Join-Path $SourceRoot "PCbuild\build.bat"
-    & $BuildScript -p x64 "/p:PlatformToolset=$PlatformToolset" 2>&1 |
-        Tee-Object -FilePath $BuildLog
+    $MsBuildResponse = Join-Path $SourceRoot "PCbuild\msbuild.rsp"
+    if (Test-Path -LiteralPath $MsBuildResponse) {
+        throw "unexpected PCbuild\msbuild.rsp in the verified source archive"
+    }
+    "/p:PlatformToolset=$PlatformToolset" |
+        Set-Content -LiteralPath $MsBuildResponse -Encoding ascii
+    & $BuildScript -p x64 2>&1 | Tee-Object -FilePath $BuildLog
     if ($LASTEXITCODE -ne 0) {
         throw "CPython PCbuild failed with exit code $LASTEXITCODE"
     }
@@ -148,14 +153,14 @@ print(json.dumps({
     $Version | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-version.txt") -Encoding ascii
     $Python | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-executable.txt") -Encoding utf8
     $Identity | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-identity.json") -Encoding utf8
-    "PCbuild\build.bat -p x64 /p:PlatformToolset=$PlatformToolset" |
+    "PCbuild\msbuild.rsp: /p:PlatformToolset=$PlatformToolset`nPCbuild\build.bat -p x64" |
         Set-Content -LiteralPath (Join-Path $EvidenceDir "python-build-command.txt") -Encoding ascii
     "python.bat PC\layout --copy <prefix> --preset-default" |
         Set-Content -LiteralPath (Join-Path $EvidenceDir "python-layout-command.txt") -Encoding ascii
 
     $Metadata = [ordered]@{
         builder_target = "windows"
-        build_command = "PCbuild\build.bat -p x64 /p:PlatformToolset=$PlatformToolset"
+        build_command = "PCbuild\build.bat -p x64"
         install_prefix = $InstallPrefix
         layout_command = "python.bat PC\layout --copy <prefix> --preset-default"
         python_executable = $Python
@@ -169,6 +174,7 @@ print(json.dumps({
         source_url = $SourceUrl
         visual_studio_version = $VisualStudioVersion
         platform_toolset = $PlatformToolset
+        msbuild_response = "/p:PlatformToolset=$PlatformToolset"
     }
     $Metadata |
         ConvertTo-Json -Depth 5 |
