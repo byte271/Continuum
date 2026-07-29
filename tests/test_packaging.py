@@ -121,9 +121,12 @@ class PackagingTests(unittest.TestCase):
             )
 
             lines = result.stdout.splitlines()
-            self.assertEqual(lines[0], str(bundle / "runtime"))
-            self.assertEqual(lines[1], str(bundle / "app"))
-            self.assertEqual(lines[2], str(bundle / "runtime-manifest.json"))
+            self.assertEqual(Path(lines[0]).resolve(), (bundle / "runtime").resolve())
+            self.assertEqual(Path(lines[1]).resolve(), (bundle / "app").resolve())
+            self.assertEqual(
+                Path(lines[2]).resolve(),
+                (bundle / "runtime-manifest.json").resolve(),
+            )
             self.assertEqual(lines[3], "-m continuum doctor")
 
 
