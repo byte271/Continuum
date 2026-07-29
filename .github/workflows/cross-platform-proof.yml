@@ -2,6 +2,9 @@ name: Cross-platform continuation proof
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: read
