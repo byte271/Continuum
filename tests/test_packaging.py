@@ -1,4 +1,5 @@
 import hashlib
+import os
 import subprocess
 import sys
 import tarfile
@@ -86,6 +87,44 @@ class PackagingTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertIn("exactly 64 lowercase", result.stderr)
+
+    def test_installed_launcher_resolves_bundle_through_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = root / "lib" / "continuum-linux-x86_64"
+            (bundle / "bin").mkdir(parents=True)
+            (bundle / "runtime" / "bin").mkdir(parents=True)
+            (bundle / "app").mkdir()
+            launcher = bundle / "bin" / "continuum"
+            launcher.write_bytes((ROOT / "packaging" / "continuum").read_bytes())
+            launcher.chmod(0o755)
+            fake_python = bundle / "runtime" / "bin" / "python3.12"
+            fake_python.write_text(
+                "#!/bin/sh\n"
+                'printf "%s\\n" "$PYTHONHOME" "$PYTHONPATH" '
+                '"$CONTINUUM_BUNDLE_MANIFEST" "$*"\n',
+                encoding="utf-8",
+            )
+            fake_python.chmod(0o755)
+            (root / "bin").mkdir()
+            command = root / "bin" / "continuum"
+            command.symlink_to("../lib/continuum-linux-x86_64/bin/continuum")
+
+            environment = os.environ.copy()
+            environment.pop("PYTHONPATH", None)
+            result = subprocess.run(
+                [str(command), "doctor"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+
+            lines = result.stdout.splitlines()
+            self.assertEqual(lines[0], str(bundle / "runtime"))
+            self.assertEqual(lines[1], str(bundle / "app"))
+            self.assertEqual(lines[2], str(bundle / "runtime-manifest.json"))
+            self.assertEqual(lines[3], "-m continuum doctor")
 
 
 if __name__ == "__main__":

@@ -64,7 +64,11 @@ case "$system:$machine" in
         ;;
 esac
 
-temporary=$(mktemp -d "${TMPDIR:-/tmp}/continuum-install-XXXXXX")
+temporary_root=${TMPDIR:-/tmp}
+if [ ! -d "$temporary_root" ]; then
+    temporary_root=$PWD
+fi
+temporary=$(mktemp -d "$temporary_root/continuum-install-XXXXXX")
 cleanup() {
     rm -rf "$temporary"
 }
@@ -138,6 +142,12 @@ fi
 mkdir -p "$install_prefix/lib" "$install_prefix/bin"
 mv "$staged" "$library_dir"
 ln -s "../lib/$bundle_name/bin/continuum" "$command_path"
+if ! "$command_path" doctor >/dev/null; then
+    unlink "$command_path"
+    mv "$library_dir" "$staged"
+    echo "installed launcher failed its compatibility check; rolled back" >&2
+    exit 1
+fi
 
 echo "Installed Continuum: $command_path"
 echo "Verify: $command_path doctor"

@@ -35,18 +35,29 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 bundle_name="continuum-$target"
 destination="$output_parent/$bundle_name"
 archive="$output_parent/$bundle_name.tar.gz"
-if [[ -e "$destination" || -e "$archive" || -e "$archive.sha256" ]]; then
+build_evidence="$output_parent/$bundle_name-build-evidence"
+if [[
+    -e "$destination"
+    || -e "$archive"
+    || -e "$archive.sha256"
+    || -e "$build_evidence"
+]]; then
     echo "bundle output already exists under $output_parent" >&2
     exit 2
 fi
 
 mkdir -p "$output_parent"
-work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/continuum-bundle-XXXXXX")"
+temporary_root="${RUNNER_TEMP:-${TMPDIR:-$output_parent}}"
+if [[ ! -d "$temporary_root" ]]; then
+    temporary_root="$output_parent"
+fi
+work_dir="$(mktemp -d "$temporary_root/continuum-bundle-XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
 python_prefix="$work_dir/python-prefix"
-build_evidence="$work_dir/python-build-evidence"
 bundle="$work_dir/$bundle_name"
 
+RUNNER_TEMP="$temporary_root" \
+TMPDIR="$temporary_root" \
 "$repo_root/validation/cross_platform/build_cpython.sh" \
     "$builder_target" \
     "$python_prefix" \
@@ -64,6 +75,7 @@ cp "$repo_root/examples/demo_input.txt" "$bundle/examples/demo_input.txt"
 cp "$repo_root/LICENSE" "$bundle/LICENSE"
 cp "$repo_root/README.md" "$bundle/README.md"
 cp -R "$build_evidence" "$bundle/python-build-evidence"
+rm -rf "$build_evidence"
 
 git_commit="$(git -C "$repo_root" rev-parse HEAD)"
 source_sha256="$(

@@ -36,10 +36,15 @@ fi
 
 mkdir -p "$evidence_dir"
 work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/continuum-cpython-3.12.13-XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
 source_archive="$work_dir/$source_name"
 source_dir="$work_dir/Python-3.12.13"
 build_log="$evidence_dir/build.log"
-exec > >(tee "$build_log") 2>&1
+if [[ -d /dev/fd ]]; then
+    exec > >(tee "$build_log") 2>&1
+else
+    exec > "$build_log" 2>&1
+fi
 
 echo "CPython source URL: $source_url"
 echo "Expected SHA-256: $expected_sha256"
