@@ -89,10 +89,10 @@ python3 -m continuum doctor
 python3 -m continuum demo --output /tmp/continuum-demo
 ```
 
-The demo automatically launches an unchanged workload, freezes four active
-frames, deletes the original bundled input, resumes in a new process, runs an
-uninterrupted control, and retains its comparison evidence. It is explicitly
-a same-machine demonstration.
+The demo automatically launches an unchanged nested-call workload, freezes a
+live continuation, deletes the original bundled input, resumes in a new
+process, runs an uninterrupted control, and retains its comparison evidence.
+It is explicitly a same-machine demonstration.
 
 To operate the CLI manually:
 
