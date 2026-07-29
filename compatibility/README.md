@@ -9,10 +9,10 @@ under:
 3. Continuum freeze and restore in the harness process;
 4. Continuum freeze and restore in a new Python process.
 
-The runner compares stdout byte for byte. It retains compile and runtime
-failures rather than excluding unsupported programs. Cross-platform status is
-`not_run` until the exact corpus image is exercised by the native proof
-workflow.
+The runner compares canonical UTF-8 stdout bytes after decoding each host's
+text-mode newline convention. It retains compile and runtime failures rather
+than excluding unsupported programs. Cross-platform status is `not_run` until
+the exact corpus image is exercised by the native proof workflow.
 
 ```bash
 python3 -m compatibility.runner \

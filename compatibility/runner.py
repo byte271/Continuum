@@ -91,15 +91,17 @@ def _run_cpython(program: Path) -> tuple[bytes, bytes, float]:
         [sys.executable, str(program)],
         cwd=program.parent,
         capture_output=True,
+        text=True,
+        encoding="utf-8",
         timeout=10,
     )
     duration = time.perf_counter() - started
     if result.returncode != 0:
         raise RuntimeError(
             f"CPython exited {result.returncode}: "
-            f"{result.stderr.decode('utf-8', 'replace').strip()}"
+            f"{result.stderr.strip()}"
         )
-    return result.stdout, result.stderr, duration
+    return result.stdout.encode("utf-8"), result.stderr.encode("utf-8"), duration
 
 
 def _run_vm(
@@ -205,7 +207,11 @@ def _new_process_resume(
         raise RuntimeError(
             f"target process exited {result.returncode}: {result.stderr.strip()}"
         )
-    return before + target_output.read_bytes(), source_seconds + target_seconds
+    # Text-mode subprocess capture and read_text both decode the host newline
+    # convention, so the differential corpus compares language output rather
+    # than treating Windows CRLF as a semantic difference.
+    after = target_output.read_text(encoding="utf-8").encode("utf-8")
+    return before + after, source_seconds + target_seconds
 
 
 def run_case(program: Path) -> dict[str, Any]:

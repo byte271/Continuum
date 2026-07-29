@@ -239,10 +239,13 @@ def _doctor(args: argparse.Namespace) -> int:
             "Windows x86_64",
         ],
         "verified_migration": (
-            "IR 0.2 Linux x86_64 -> macOS arm64 at "
-            "15bceefece050d06a1f504244a77434e31fd5228"
+            "IR 0.3 Linux x86_64 -> macOS arm64, Actions run 30497170058, "
+            "commit 32edf7a66162b155c8ccdb4ae75fb545e037604d"
         ),
-        "current_runtime_cross_platform": "unverified",
+        "current_runtime_cross_platform": (
+            "verified for IR 0.3 Linux x86_64 -> macOS arm64; "
+            "release publication requires a fresh exact-commit proof"
+        ),
         "self_contained": bundle_manifest is not None,
         "bundle_manifest": manifest_path,
         "problems": problems,
@@ -472,6 +475,7 @@ def _demo(args: argparse.Namespace) -> int:
     control_hash = _demo_final_hash(control_bytes)
     source_progress = _demo_progress(before)
     target_progress = _demo_progress(after)
+    identity_count, final_count = _demo_marker_counts(combined)
     comparison = {
         "source_pid": source.pid,
         "source_returncode": source_returncode,
@@ -489,8 +493,8 @@ def _demo(args: argparse.Namespace) -> int:
         "resumed_final_hash": resumed_hash,
         "control_final_hash": control_hash,
         "final_hash_matches": resumed_hash == control_hash,
-        "identity_proof_once": combined.count(b"IDENTITY True True\n") == 1,
-        "final_output_once": combined.count(b"FINAL ") == 1,
+        "identity_proof_once": identity_count == 1,
+        "final_output_once": final_count == 1,
     }
     comparison_path.write_text(
         json.dumps(comparison, indent=2, sort_keys=True) + "\n",
@@ -562,6 +566,14 @@ def _demo_progress(content: bytes) -> list[str]:
         for line in content.splitlines()
         if line.startswith(b"Processing ")
     ]
+
+
+def _demo_marker_counts(content: bytes) -> tuple[int, int]:
+    lines = content.splitlines()
+    return (
+        lines.count(b"IDENTITY True True"),
+        sum(line.startswith(b"FINAL ") for line in lines),
+    )
 
 
 def _demo_final_hash(content: bytes) -> str | None:

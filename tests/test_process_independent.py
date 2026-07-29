@@ -79,8 +79,13 @@ class ProcessIndependentTests(unittest.TestCase):
             self.assertNotEqual(source_pid, target_pid)
             self.assertNotIn("START_SENTINEL", target_stdout)
             self.assertEqual(target_stdout.count("FINAL_COUNT 300000"), 1)
+            source_architecture = {
+                "amd64": "x86_64",
+                "x64": "x86_64",
+                "aarch64": "arm64",
+            }.get(platform.machine().lower(), platform.machine().lower())
             self.assertIn(
-                f"Restored from {platform.system()} {platform.machine()}.",
+                f"Restored from {platform.system()} {source_architecture}.",
                 target_stderr,
             )
 

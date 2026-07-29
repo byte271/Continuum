@@ -15,7 +15,9 @@ For every program, `python3 -m compatibility.runner` performs:
 3. Continuum checkpoint and restore in the harness process;
 4. Continuum checkpoint and restore in a newly created Python process.
 
-The exact source file is used in every mode. Stdout is compared byte for byte.
+The exact source file is used in every mode. Text-mode host line endings are
+decoded and output is then compared as canonical UTF-8 bytes; this prevents
+Windows CRLF from being misclassified as a language-semantic difference.
 Failures remain in the denominator. Cross-platform status remains `not_run`
 until these exact programs are exercised by the native proof workflow.
 

@@ -6,8 +6,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from continuum.cli import _demo_marker_counts
+
 
 class CliDemoTests(unittest.TestCase):
+    def test_proof_markers_accept_windows_crlf_without_substring_matches(self):
+        content = (
+            b"IDENTITY True True\r\n"
+            b"IDENTITY True True EXTRA\r\n"
+            b"FINAL " + b"a" * 64 + b"\r\n"
+        )
+        self.assertEqual(_demo_marker_counts(content), (1, 1))
+
     def test_demo_freezes_resumes_and_matches_control(self):
         repository = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temporary:

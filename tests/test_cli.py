@@ -17,7 +17,10 @@ from continuum.cli import _doctor, _resume
 class DoctorTests(unittest.TestCase):
     def test_doctor_reports_supported_source_checkout(self):
         output = io.StringIO()
-        with mock.patch.dict(os.environ, {}, clear=True), redirect_stdout(output):
+        with mock.patch.dict(
+            os.environ,
+            {"CONTINUUM_BUNDLE_MANIFEST": ""},
+        ), redirect_stdout(output):
             result = _doctor(argparse.Namespace(json=True))
 
         self.assertEqual(result, 0)
@@ -25,15 +28,19 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(report["continuum_version"], __version__)
         self.assertEqual(report["continuum_ir_version"], IR_VERSION)
         self.assertEqual(report["python_version"], SUPPORTED_PYTHON)
-        self.assertEqual(report["current_runtime_cross_platform"], "unverified")
-        self.assertIn("IR 0.2", report["verified_migration"])
+        self.assertIn(
+            "fresh exact-commit proof",
+            report["current_runtime_cross_platform"],
+        )
+        self.assertIn("IR 0.3", report["verified_migration"])
+        self.assertIn("30497170058", report["verified_migration"])
         self.assertFalse(report["self_contained"])
         self.assertEqual(report["problems"], [])
 
     def test_doctor_rejects_wrong_python_version(self):
         output = io.StringIO()
         with (
-            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.dict(os.environ, {"CONTINUUM_BUNDLE_MANIFEST": ""}),
             mock.patch.object(platform, "python_version", return_value="3.12.12"),
             redirect_stdout(output),
         ):
@@ -46,7 +53,7 @@ class DoctorTests(unittest.TestCase):
     def test_doctor_accepts_windows_x86_64(self):
         output = io.StringIO()
         with (
-            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.dict(os.environ, {"CONTINUUM_BUNDLE_MANIFEST": ""}),
             mock.patch.object(platform, "system", return_value="Windows"),
             mock.patch.object(platform, "machine", return_value="AMD64"),
             redirect_stdout(output),
@@ -80,7 +87,6 @@ class DoctorTests(unittest.TestCase):
                 mock.patch.dict(
                     os.environ,
                     {"CONTINUUM_BUNDLE_MANIFEST": str(manifest)},
-                    clear=True,
                 ),
                 redirect_stdout(output),
             ):
