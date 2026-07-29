@@ -1,0 +1,123 @@
+name: Self-contained runtime bundles
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-x86_64:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify clean source identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Build exact Linux x86_64 runtime bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          packaging/build_bundle.sh linux-x86_64 "$RUNNER_TEMP/bundles"
+
+      - name: Test moved archive and installer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="$RUNNER_TEMP/bundles/continuum-linux-x86_64.tar.gz"
+          digest="$(awk '{print $1}' "$archive.sha256")"
+          (
+            cd "$RUNNER_TEMP/bundles"
+            sha256sum -c continuum-linux-x86_64.tar.gz.sha256
+          )
+          mkdir "$RUNNER_TEMP/extracted"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/extracted"
+          "$RUNNER_TEMP/extracted/continuum-linux-x86_64/bin/continuum" doctor
+          PYTHONHOME="$RUNNER_TEMP/extracted/continuum-linux-x86_64/runtime" \
+          PYTHONPATH=. \
+            "$RUNNER_TEMP/extracted/continuum-linux-x86_64/runtime/bin/python3.12" \
+            -m unittest discover -s tests -v
+          packaging/install.sh \
+            --archive "$archive" \
+            --sha256 "$digest" \
+            --prefix "$RUNNER_TEMP/installed"
+          "$RUNNER_TEMP/installed/bin/continuum" doctor
+
+      - name: Upload Linux x86_64 bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: continuum-linux-x86_64-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/bundles/continuum-linux-x86_64.tar.gz
+            ${{ runner.temp }}/bundles/continuum-linux-x86_64.tar.gz.sha256
+          retention-days: 30
+
+  macos-arm64:
+    runs-on: macos-26
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify clean source identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1)"
+          test "$(uname -m)" = arm64
+          test "$(arch)" = arm64
+          test "$(sysctl -in sysctl.proc_translated 2>/dev/null || echo 0)" = 0
+
+      - name: Build exact macOS arm64 runtime bundle
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          packaging/build_bundle.sh macos-arm64 "$RUNNER_TEMP/bundles"
+
+      - name: Test moved archive and installer
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="$RUNNER_TEMP/bundles/continuum-macos-arm64.tar.gz"
+          digest="$(awk '{print $1}' "$archive.sha256")"
+          (
+            cd "$RUNNER_TEMP/bundles"
+            shasum -a 256 -c continuum-macos-arm64.tar.gz.sha256
+          )
+          mkdir "$RUNNER_TEMP/extracted"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/extracted"
+          "$RUNNER_TEMP/extracted/continuum-macos-arm64/bin/continuum" doctor
+          PYTHONHOME="$RUNNER_TEMP/extracted/continuum-macos-arm64/runtime" \
+          PYTHONPATH=. \
+            "$RUNNER_TEMP/extracted/continuum-macos-arm64/runtime/bin/python3.12" \
+            -m unittest discover -s tests -v
+          packaging/install.sh \
+            --archive "$archive" \
+            --sha256 "$digest" \
+            --prefix "$RUNNER_TEMP/installed"
+          "$RUNNER_TEMP/installed/bin/continuum" doctor
+
+      - name: Upload macOS arm64 bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: continuum-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/bundles/continuum-macos-arm64.tar.gz
+            ${{ runner.temp }}/bundles/continuum-macos-arm64.tar.gz.sha256
+          retention-days: 30

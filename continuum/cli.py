@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import platform
 import sys
 from pathlib import Path
@@ -9,7 +11,12 @@ from . import SUPPORTED_PYTHON, __version__
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
 from .image import inspect_image, load_image
-from .session import SessionController, list_sessions, request_freeze
+from .session import (
+    SessionController,
+    continuum_home,
+    list_sessions,
+    request_freeze,
+)
 from .vm import VirtualMachine
 
 
@@ -33,6 +40,13 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("arguments", nargs=argparse.REMAINDER)
 
     subparsers.add_parser("sessions", help="list known Continuum sessions")
+
+    doctor = subparsers.add_parser(
+        "doctor", help="report runtime identity and compatibility"
+    )
+    doctor.add_argument(
+        "--json", action="store_true", help="emit a machine-readable report"
+    )
 
     freeze = subparsers.add_parser("freeze", help="freeze a running session")
     freeze.add_argument("session_id")
@@ -63,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run(args)
         if args.command == "sessions":
             return _sessions()
+        if args.command == "doctor":
+            return _doctor(args)
         if args.command == "freeze":
             return _freeze(args)
         if args.command == "inspect":
@@ -127,6 +143,105 @@ def _sessions() -> int:
             f"{record.get('program', '?')}"
         )
     return 0
+
+
+def _doctor(args: argparse.Namespace) -> int:
+    current_python = platform.python_version()
+    current_system = platform.system()
+    current_machine = {
+        "amd64": "x86_64",
+        "x64": "x86_64",
+        "aarch64": "arm64",
+    }.get(platform.machine().lower(), platform.machine().lower())
+    manifest_path = os.environ.get("CONTINUUM_BUNDLE_MANIFEST")
+    bundle_manifest = None
+    problems = []
+
+    if current_python != SUPPORTED_PYTHON:
+        problems.append(
+            f"Python {current_python} is incompatible; exact "
+            f"CPython {SUPPORTED_PYTHON} is required"
+        )
+    if current_system not in {"Linux", "Darwin"}:
+        problems.append(f"unsupported operating system: {current_system}")
+    if current_machine not in {"x86_64", "arm64"}:
+        problems.append(f"unsupported architecture: {current_machine}")
+
+    if manifest_path:
+        path = Path(manifest_path)
+        try:
+            bundle_manifest = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            problems.append(f"cannot read runtime bundle manifest: {exc}")
+        else:
+            expected = {
+                "continuum_version": __version__,
+                "python_version": SUPPORTED_PYTHON,
+                "system": current_system,
+                "architecture": current_machine,
+                "self_contained": True,
+            }
+            for key, value in expected.items():
+                if bundle_manifest.get(key) != value:
+                    problems.append(
+                        f"runtime bundle manifest {key} mismatch: "
+                        f"expected {value!r}, got {bundle_manifest.get(key)!r}"
+                    )
+
+    report = {
+        "continuum_version": __version__,
+        "python_implementation": platform.python_implementation(),
+        "python_version": current_python,
+        "required_python_version": SUPPORTED_PYTHON,
+        "os": current_system,
+        "architecture": current_machine,
+        "continuum_home": str(continuum_home()),
+        "capture_file_policies": ["strict", "bundle"],
+        "restore_file_policies": ["strict", "relocate", "bundle"],
+        "compatible_image_targets": [
+            "Linux x86_64",
+            "Linux arm64",
+            "macOS x86_64",
+            "macOS arm64",
+        ],
+        "verified_migration": "Linux x86_64 -> macOS arm64",
+        "self_contained": bundle_manifest is not None,
+        "bundle_manifest": manifest_path,
+        "problems": problems,
+    }
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(f"Continuum version: {report['continuum_version']}")
+        print(
+            "Runtime: "
+            f"{report['python_implementation']} {report['python_version']} "
+            f"(required {report['required_python_version']})"
+        )
+        print(f"Host: {report['os']} {report['architecture']}")
+        print(
+            "Compatible image targets: "
+            + ", ".join(report["compatible_image_targets"])
+        )
+        print(f"Verified migration: {report['verified_migration']}")
+        print(f"Continuum home: {report['continuum_home']}")
+        print(
+            "Resource policies: capture "
+            + ", ".join(report["capture_file_policies"])
+            + "; restore "
+            + ", ".join(report["restore_file_policies"])
+        )
+        print(
+            "Self-contained installation: "
+            + ("yes" if report["self_contained"] else "no")
+        )
+        if problems:
+            print("Compatibility: FAILED")
+            for problem in problems:
+                print(f"- {problem}")
+        else:
+            print("Compatibility: OK")
+    return 2 if problems else 0
 
 
 def _freeze(args: argparse.Namespace) -> int:
