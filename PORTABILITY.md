@@ -47,9 +47,9 @@ implementation and can still have platform-specific behavior.
 | --- | --- | --- |
 | Current Linux x86_64 process | New process on same Linux x86_64 host | verified |
 | Current Linux x86_64 process | Linux x86_64 dry-run of cross-platform package | verified; 6,603 combined output lines exactly matched uninterrupted control |
-| Linux x86_64 host | Second physical Linux x86_64 host | unverified |
-| Linux x86_64 host | Real macOS arm64 Apple Silicon | unverified |
-| Any real cross-architecture pair | Any | unverified |
+| Linux x86_64 host | Second native Linux x86_64 environment | unverified |
+| GitHub-hosted Linux x86_64 VM | Native GitHub-hosted macOS arm64 | unverified |
+| Any native cross-architecture pair | Any | unverified |
 
 The Linux source half generated
 `artifacts/cross-platform-linux-dry-run-2/linux-x86_64.cont`, recorded its
@@ -61,7 +61,7 @@ counted as cross-OS or cross-architecture proof.
 
 See `validation/cross_platform/README.md`. The source and target scripts:
 
-- refuse the wrong real OS/architecture;
+- refuse the wrong native OS/architecture;
 - record `uname -a`, `uname -m`, Python and Continuum versions;
 - record source/target PIDs and source exit;
 - compare SHA-256 on both machines;

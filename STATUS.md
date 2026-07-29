@@ -24,7 +24,7 @@ Updated: 2026-07-29
 - Failed checkpoint leaves source state live and permits a later successful
   retry.
 - Public `run`, `sessions`, `freeze`, `inspect`, `resume`, and `--version`.
-- Current full suite: 49 tests discovered, 48 passed, one real Apple Silicon
+- Current full suite: 59 tests discovered, 58 passed, one native Apple Silicon
   test skipped on this Linux x86_64 host.
 
 ## PARTIALLY WORKING
@@ -60,7 +60,11 @@ Updated: 2026-07-29
 
 - Linux x86_64 to Apple Silicon macOS arm64 continuation.
 - Any cross-architecture or cross-operating-system continuation.
-- Resume on a second physical Linux x86_64 machine or after an actual reboot.
+- Resume in a second native Linux x86_64 environment or after an actual reboot.
 - Native macOS resource behavior and directory durability.
 - The prepared package in `validation/cross_platform/` has passed its Linux
   source and same-host control dry run only. No target evidence was generated.
+- `.github/workflows/cross-platform-proof.yml` now defines the required
+  `ubuntu-24.04` source and dependent `macos-26` target jobs, but it has not
+  been dispatched because this checkout has no GitHub remote or authenticated
+  GitHub CLI. No workflow URL, run ID, or Actions artifact exists yet.

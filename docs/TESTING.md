@@ -41,7 +41,7 @@ Raw untouched-baseline and final verification logs are under `artifacts/`.
 Use `validation/cross_platform/README.md`. The Linux script has been exercised
 on the current x86_64 environment, including bundled-input deletion and a
 same-host new-process control comparison. The macOS script has not run because
-no real Apple Silicon host is available.
+no native Apple Silicon runner has completed the validation.
 
 Passing only manifest checks, containers, emulation, mocked platform strings,
 or this Linux dry run does not satisfy cross-platform acceptance.

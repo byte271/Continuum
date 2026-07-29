@@ -15,8 +15,10 @@ from pathlib import Path
 
 from common import (
     EXPECTED_PYTHON,
+    all_evidence_files,
     create_source_identity,
     git_identity,
+    import_python_build_evidence,
     render_raw_commands,
     run_full_tests,
     sha256_file,
@@ -25,6 +27,7 @@ from common import (
     write_file_manifest,
     write_json,
 )
+from qualification import qualify_linux_source
 
 
 def container_markers() -> list[str]:
@@ -53,6 +56,37 @@ def container_markers() -> list[str]:
         and detection.stdout.strip() not in {"", "none"}
     ):
         markers.append(f"systemd-detect-virt:{detection.stdout.strip()}")
+    return sorted(set(markers))
+
+
+def emulation_markers() -> list[str]:
+    observations = []
+    for path in (
+        Path("/proc/cpuinfo"),
+        Path("/sys/class/dmi/id/product_name"),
+        Path("/sys/class/dmi/id/sys_vendor"),
+    ):
+        try:
+            observations.append(f"{path}:{path.read_text(encoding='utf-8')}")
+        except OSError:
+            pass
+    for command in (["lscpu"], ["systemd-detect-virt", "--vm"]):
+        try:
+            completed = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            continue
+        observations.append(
+            f"{' '.join(command)}:{completed.stdout}\n{completed.stderr}"
+        )
+    combined = "\n".join(observations).lower()
+    markers = []
+    for name in ("qemu", "tcg", "bochs"):
+        if name in combined:
+            markers.append(name)
     return sorted(set(markers))
 
 
@@ -110,20 +144,29 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         )
     architecture = platform.machine().lower()
     markers = container_markers()
-    if platform.system() != "Linux" or architecture not in {"x86_64", "amd64"}:
+    emulation = emulation_markers()
+    if platform.system() != "Linux" or architecture != "x86_64":
         raise RuntimeError("source validation requires Linux x86_64")
     if platform.python_version() != EXPECTED_PYTHON:
         raise RuntimeError(
             f"source requires Python {EXPECTED_PYTHON}; "
             f"current is {platform.python_version()}"
         )
-    if markers and not args.rehearsal:
-        raise RuntimeError(
-            "containerized Linux is not accepted as real source evidence: "
-            + ", ".join(markers)
-        )
 
     identity = create_source_identity(repository, output)
+    python_build_metadata: dict[str, object] = {}
+    python_build_verified = False
+    if args.python_build_evidence is not None:
+        python_build_metadata, _ = import_python_build_evidence(
+            repository=repository,
+            source=args.python_build_evidence.resolve(),
+            destination=output,
+            label="linux",
+            expected_system="Linux",
+            expected_machine="x86_64",
+            current_executable=sys.executable,
+        )
+        python_build_verified = True
     environment = {
         **os.environ,
         "PYTHONPATH": str(repository),
@@ -134,8 +177,22 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         [
             ["uname", "-a"],
             ["uname", "-m"],
-            ["python3", "--version"],
-            ["python3", "-m", "continuum", "--version"],
+            ["cat", "/proc/cpuinfo"],
+            ["lscpu"],
+            ["systemd-detect-virt", "--vm"],
+            ["systemd-detect-virt", "--container"],
+            [sys.executable, "--version"],
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import platform, sys; "
+                    "print(platform.system()); "
+                    "print(platform.machine()); "
+                    "print(sys.executable)"
+                ),
+            ],
+            [sys.executable, "-m", "continuum", "--version"],
             ["git", "rev-parse", "HEAD"],
             ["git", "status", "--porcelain=v1"],
             ["sha256sum", str(repository_archive)],
@@ -146,14 +203,50 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
     (output / "linux-environment.txt").write_text(
         raw_environment, encoding="utf-8"
     )
-    if any(result.returncode != 0 for result in environment_results):
-        raise RuntimeError("Linux environment command failed")
+    required_result_indexes = (0, 1, 2, 3, 6, 7, 8, 9, 10, 11)
+    if any(
+        environment_results[index].returncode != 0
+        for index in required_result_indexes
+    ):
+        raise RuntimeError("required Linux environment command failed")
     if environment_results[1].stdout.strip() != "x86_64":
         raise RuntimeError("uname -m is not exactly x86_64")
-    if environment_results[2].stdout.strip() != f"Python {EXPECTED_PYTHON}":
-        raise RuntimeError("python3 is not exactly Python 3.12.13")
-    if environment_results[5].stdout:
+    if environment_results[6].stdout.strip() != f"Python {EXPECTED_PYTHON}":
+        raise RuntimeError("validation interpreter is not exactly Python 3.12.13")
+    python_identity_lines = environment_results[7].stdout.splitlines()
+    if python_identity_lines[:2] != ["Linux", "x86_64"]:
+        raise RuntimeError("validation interpreter is not native Linux x86_64")
+    if environment_results[10].stdout:
         raise RuntimeError("Git working tree is not clean")
+    qualified, qualification_failures, github = qualify_linux_source(
+        system=platform.system(),
+        machine=platform.machine(),
+        uname_machine=environment_results[1].stdout.strip(),
+        python_version=platform.python_version(),
+        python_system=python_identity_lines[0],
+        python_machine=python_identity_lines[1],
+        python_build_verified=python_build_verified,
+        container_markers=markers,
+        emulation_markers=emulation,
+        git_commit=str(identity["git_commit"]),
+        environment=os.environ,
+    )
+    qualification = {
+        "qualified_native_linux_x86_64": qualified and not args.rehearsal,
+        "failures": qualification_failures,
+        "rehearsal": bool(args.rehearsal),
+        "container_markers": markers,
+        "emulation_markers": emulation,
+        "github": github,
+        "python_build_verified": python_build_verified,
+    }
+    write_json(output / "linux-qualification.json", qualification)
+    write_json(output / "github-linux-metadata.json", github)
+    if qualification_failures and not args.rehearsal:
+        raise RuntimeError(
+            "native GitHub Linux qualification failed: "
+            + "; ".join(qualification_failures)
+        )
 
     run_full_tests(
         repository,
@@ -292,13 +385,18 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
 
     evidence = {
         "phase": "source",
-        "qualified_real_linux_x86_64": not markers and not args.rehearsal,
+        "qualified_native_linux_x86_64": qualified and not args.rehearsal,
         "rehearsal": bool(args.rehearsal),
         "container_markers": markers,
+        "emulation_markers": emulation,
+        "qualification_failures": qualification_failures,
+        "github": github,
         "source_system": platform.system(),
-        "source_machine": "x86_64",
+        "source_machine": platform.machine(),
         "python_version": platform.python_version(),
         "python_executable": sys.executable,
+        "python_build": python_build_metadata,
+        "python_build_verified": python_build_verified,
         **identity,
         "source_tree_sha256_file": "source-tree.sha256",
         "source_pid": source_pid,
@@ -309,6 +407,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "source_returncode": source_returncode,
         "source_process_exited": True,
         "source_process_reaped": source_reaped,
+        "git_worktree_clean": True,
         "session_id": session_id,
         "freeze_location": manifest["resume_location"],
         "frame_count": manifest["frames"],
@@ -334,21 +433,9 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "recorded_at": utc_now(),
     }
     write_json(output / "source-evidence.json", evidence)
-    source_evidence_files = (
-        "control-input.txt",
-        "freeze-stderr.log",
-        "freeze-stdout.log",
-        "full-test-linux.txt",
-        "git-commit.txt",
-        "image-source.sha256",
-        "linux-environment.txt",
-        "linux-x86_64.cont",
-        "repository.sha256",
-        "repository.tar",
-        "source-evidence.json",
-        "source-stderr.log",
-        "source-stdout.log",
-        "source-tree.sha256",
+    source_evidence_files = all_evidence_files(
+        output,
+        exclude=("linux-evidence.sha256",),
     )
     write_file_manifest(
         output,
@@ -364,6 +451,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--iterations", type=int, default=6000)
+    parser.add_argument("--python-build-evidence", type=Path)
     parser.add_argument(
         "--rehearsal",
         action="store_true",

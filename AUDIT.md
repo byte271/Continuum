@@ -100,7 +100,7 @@ or individual arithmetic opcode. A request at those points is delayed.
 
 ## Remaining high-risk gaps
 
-- No real second machine, CPU architecture, or operating system has resumed an
+- No second native CPU architecture or operating system has resumed an
   image.
 - Failure injection does not yet cover every ZIP write, fsync, checksum write,
   and rename boundary.

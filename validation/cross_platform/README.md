@@ -1,4 +1,4 @@
-# Real Linux x86_64 to macOS arm64 validation
+# Native GitHub Linux x86_64 to macOS arm64 validation
 
 These scripts are the only accepted cross-platform validation path. They do
 not change Continuum compatibility checks, recompile the application during
@@ -18,20 +18,26 @@ SHA-256 manifest for every tracked file and a `git archive` tar file for the
 current commit. Git documents that `git archive HEAD` archives the named tree;
 the generated archive is used as the transferred repository identity.
 
-## 2. Run on real Linux x86_64
+## 2. Run on native GitHub Linux x86_64
 
-Use CPython 3.12.13. The evidence directory must be new, empty, and outside
-the Git working tree:
+Use the `linux-source` job on `ubuntu-24.04`. The job builds exact CPython
+3.12.13 from the official source-only release. The pinned XZ tarball SHA-256
+is:
 
-```bash
-python3 validation/cross_platform/source_linux.py \
-  --output /absolute/path/continuum-attempt-001
+```text
+c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684
 ```
 
-The command refuses obvious container environments. It:
+The source validator accepts evidence only when GitHub metadata identifies
+the `linux-source` job as a GitHub-hosted Linux X64 runner. It:
 
-- verifies Linux and exact `x86_64`;
+- verifies Linux, exact `x86_64` in Python and `uname`, and `RUNNER_ARCH=X64`;
+- rejects application-container and known QEMU/TCG/Bochs markers;
+- records `/proc/cpuinfo`, `lscpu`, virtualization checks, `ImageOS`, and
+  `ImageVersion`;
 - verifies Python 3.12.13 and a clean Git tree;
+- verifies that the current interpreter matches the independently recorded
+  native CPython source build;
 - records raw environment command output;
 - runs the complete test suite;
 - creates `git-commit.txt`, `source-tree.sha256`, `repository.tar`, and
@@ -46,14 +52,15 @@ The command refuses obvious container environments. It:
 - writes `linux-evidence.sha256` over the complete source-phase evidence and
   makes those files read-only.
 
-`--rehearsal` permits a container-only mechanics test. Rehearsal evidence is
-marked disqualified and the macOS target script refuses it.
+`--rehearsal` permits a local mechanics test. Rehearsal evidence is marked
+disqualified and the macOS target script refuses it.
 
 ## 3. Transfer without mutation
 
-Copy the exact Git revision and the entire evidence directory to a physical
-Apple Silicon Mac. Do not regenerate the image. Keep `repository.tar`,
-`source-tree.sha256`, and all Linux logs beside it.
+The workflow creates a deterministic tar of the complete Linux evidence
+directory and uploads the tar plus its SHA-256 as one Actions artifact. The
+`macos-target` job has `needs: linux-source`, downloads that artifact, verifies
+its SHA-256 before extraction, and retains the transferred archive identity.
 
 The target script independently checks:
 
@@ -65,19 +72,19 @@ The target script independently checks:
 
 Any mismatch stops validation.
 
-## 4. Run on native Apple Silicon macOS
+## 4. Run on GitHub-hosted Apple Silicon macOS
 
-Use CPython 3.12.13 running natively as arm64:
-
-```bash
-python3 validation/cross_platform/target_macos.py \
-  --input /absolute/path/continuum-attempt-001
-```
+The `macos-target` job runs on `macos-26`, which must report native Darwin
+arm64. It independently builds CPython 3.12.13 from the same verified source
+release. The workflow supplies the verified archive path, archive hash,
+source-job result, source commit, extracted evidence, and target build
+evidence to `target_macos.py`; invoking that script without the transferred
+chain is intentionally rejected.
 
 The script records raw `sw_vers`, `uname`, `arch`, Python, binary `file`,
 CPU-brand, Rosetta, Git, and SHA-256 evidence. It rejects:
 
-- a non-Darwin host;
+- a non-Darwin host or non-GitHub-hosted target;
 - `uname -m` or `arch` other than `arm64`;
 - Python reporting anything other than `Darwin` and `arm64`;
 - a translated Rosetta process;
@@ -95,9 +102,18 @@ python3 -m continuum resume linux-x86_64.cont --file-policy bundle
 ```
 
 After resume it hashes the image again, runs the uninterrupted control, writes
-`combined-output.log`, and evaluates all 18 required conditions in
+`combined-output.log`, and evaluates all 26 required conditions in
 `comparison.json`. It then writes `final-evidence.sha256` over the complete
 successful evidence set and makes those files read-only.
+
+The public entry point is:
+
+```bash
+gh workflow run .github/workflows/cross-platform-proof.yml --ref main
+```
+
+GitHub requires a `workflow_dispatch` workflow to exist on the repository's
+default branch before it can be manually dispatched.
 
 ## Evidence files
 
@@ -110,6 +126,12 @@ repository.tar
 repository.sha256
 linux-evidence.sha256
 final-evidence.sha256
+evidence-archive.sha256
+image-transferred.sha256
+github-linux-metadata.json
+github-macos-metadata.json
+linux-qualification.json
+macos-qualification.json
 linux-environment.txt
 macos-environment.txt
 source-evidence.json
@@ -141,5 +163,6 @@ complete `linux-evidence.sha256` set—whose source evidence is written only
 after the source process exits and is reaped—before it creates the new target
 process.
 
-No `target-evidence.json` or successful `comparison.json` means cross-platform
-restoration remains unverified.
+No `target-evidence.json`, successful 26-condition `comparison.json`, and
+verified `final-evidence.sha256` means cross-platform restoration remains
+unverified.

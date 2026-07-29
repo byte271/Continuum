@@ -114,4 +114,4 @@ Negative:
 - runtime slowdown is currently large;
 - library calls are atomic regions and cannot freeze internally;
 - native-returned objects must be gone at a safe point or checkpoint fails;
-- cross-platform behavior still requires real Apple Silicon verification.
+- cross-platform behavior still requires native Apple Silicon verification.

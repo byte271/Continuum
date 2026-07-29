@@ -1,0 +1,222 @@
+name: Cross-platform continuation proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-source:
+    runs-on: ubuntu-24.04
+    outputs:
+      evidence_archive_sha256: ${{ steps.archive.outputs.evidence_archive_sha256 }}
+      source_commit: ${{ steps.archive.outputs.source_commit }}
+    steps:
+      - name: Check out exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify clean source identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Build exact CPython 3.12.13
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          validation/cross_platform/build_cpython.sh \
+            linux \
+            "$RUNNER_TEMP/cpython-3.12.13-linux" \
+            "$RUNNER_TEMP/python-build-linux"
+
+      - name: Generate native Linux source evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          "$RUNNER_TEMP/cpython-3.12.13-linux/bin/python3.12" \
+            validation/cross_platform/source_linux.py \
+            --output "$RUNNER_TEMP/continuum-linux-evidence" \
+            --python-build-evidence "$RUNNER_TEMP/python-build-linux"
+
+      - name: Independently verify Linux evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          "$RUNNER_TEMP/cpython-3.12.13-linux/bin/python3.12" \
+            validation/cross_platform/verify_evidence.py \
+            source \
+            "$RUNNER_TEMP/continuum-linux-evidence"
+
+      - name: Archive complete Linux evidence
+        id: archive
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          evidence_dir="$RUNNER_TEMP/continuum-linux-evidence"
+          archive="$RUNNER_TEMP/continuum-linux-evidence.tar"
+          archive_hash="$RUNNER_TEMP/continuum-linux-evidence.tar.sha256"
+
+          if [[ ! -d "$evidence_dir" ]]; then
+            mkdir -p "$evidence_dir"
+          fi
+          if [[ -d "$RUNNER_TEMP/python-build-linux" ]] \
+             && [[ ! -e "$evidence_dir/python-linux-build.log" ]]; then
+            cp -R \
+              "$RUNNER_TEMP/python-build-linux" \
+              "$evidence_dir/failed-python-build-linux"
+          fi
+
+          tar \
+            --sort=name \
+            --mtime='UTC 1970-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --format=gnu \
+            -cf "$archive" \
+            -C "$RUNNER_TEMP" \
+            continuum-linux-evidence
+
+          (
+            cd "$RUNNER_TEMP"
+            sha256sum continuum-linux-evidence.tar \
+              > continuum-linux-evidence.tar.sha256
+          )
+          digest="$(awk '{print $1}' "$archive_hash")"
+          echo "evidence_archive_sha256=$digest" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload complete Linux evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: continuum-linux-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/continuum-linux-evidence.tar
+            ${{ runner.temp }}/continuum-linux-evidence.tar.sha256
+          retention-days: 90
+
+  macos-target:
+    needs: linux-source
+    runs-on: macos-26
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify clean target identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "${{ needs.linux-source.outputs.source_commit }}"
+          test -z "$(git status --porcelain=v1)"
+
+      - name: Build exact CPython 3.12.13 independently
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          validation/cross_platform/build_cpython.sh \
+            macos \
+            "$RUNNER_TEMP/cpython-3.12.13-macos" \
+            "$RUNNER_TEMP/python-build-macos"
+
+      - name: Download Linux evidence artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: continuum-linux-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/linux-evidence-artifact
+
+      - name: Verify and extract transferred evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact_dir="$RUNNER_TEMP/linux-evidence-artifact"
+          archive="$artifact_dir/continuum-linux-evidence.tar"
+          sidecar="$artifact_dir/continuum-linux-evidence.tar.sha256"
+          evidence_dir="$RUNNER_TEMP/continuum-linux-evidence"
+          expected="${{ needs.linux-source.outputs.evidence_archive_sha256 }}"
+
+          test ! -e "$evidence_dir"
+          actual="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          recorded="$(awk '{print $1}' "$sidecar")"
+          test "$actual" = "$expected"
+          test "$actual" = "$recorded"
+
+          tar -xf "$archive" -C "$RUNNER_TEMP"
+          cp "$sidecar" "$evidence_dir/evidence-archive.sha256"
+
+          image="$evidence_dir/linux-x86_64.cont"
+          source_hash="$(awk '{print $1}' "$evidence_dir/image-source.sha256")"
+          transferred_hash="$(shasum -a 256 "$image" | awk '{print $1}')"
+          test "$source_hash" = "$transferred_hash"
+          printf '%s  %s\n' \
+            "$transferred_hash" \
+            "linux-x86_64.cont" \
+            > "$evidence_dir/image-transferred.sha256"
+
+          "$RUNNER_TEMP/cpython-3.12.13-macos/bin/python3.12" \
+            validation/cross_platform/verify_evidence.py \
+            source \
+            "$evidence_dir"
+
+      - name: Resume unchanged image on native macOS arm64
+        shell: bash
+        env:
+          CONTINUUM_EVIDENCE_ARCHIVE_PATH: ${{ runner.temp }}/linux-evidence-artifact/continuum-linux-evidence.tar
+          CONTINUUM_EVIDENCE_ARCHIVE_SHA256: ${{ needs.linux-source.outputs.evidence_archive_sha256 }}
+          CONTINUUM_SOURCE_JOB_COMMIT: ${{ needs.linux-source.outputs.source_commit }}
+          CONTINUUM_SOURCE_JOB_RESULT: ${{ needs.linux-source.result }}
+        run: |
+          set -Eeuo pipefail
+          "$RUNNER_TEMP/cpython-3.12.13-macos/bin/python3.12" \
+            validation/cross_platform/target_macos.py \
+            --input "$RUNNER_TEMP/continuum-linux-evidence" \
+            --python-build-evidence "$RUNNER_TEMP/python-build-macos"
+
+      - name: Independently verify final evidence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          "$RUNNER_TEMP/cpython-3.12.13-macos/bin/python3.12" \
+            validation/cross_platform/verify_evidence.py \
+            final \
+            "$RUNNER_TEMP/continuum-linux-evidence"
+
+      - name: Preserve target failure evidence
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          evidence_dir="$RUNNER_TEMP/continuum-linux-evidence"
+          if [[ ! -d "$evidence_dir" ]]; then
+            mkdir -p "$evidence_dir"
+          fi
+          if [[ -d "$RUNNER_TEMP/python-build-macos" ]] \
+             && [[ ! -e "$evidence_dir/python-macos-build.log" ]]; then
+            cp -R \
+              "$RUNNER_TEMP/python-build-macos" \
+              "$evidence_dir/failed-python-build-macos"
+          fi
+
+      - name: Upload complete final evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: continuum-final-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          include-hidden-files: true
+          path: ${{ runner.temp }}/continuum-linux-evidence
+          retention-days: 90

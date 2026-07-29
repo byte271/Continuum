@@ -4,13 +4,27 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Iterable
 
 
 EXPECTED_PYTHON = "3.12.13"
+CPYTHON_BUILD_FILES = (
+    "build-metadata.json",
+    "build.log",
+    "compiler.txt",
+    "configure-command.txt",
+    "python-executable.txt",
+    "python-file.txt",
+    "python-platform.txt",
+    "python-version.txt",
+    "source-url.txt",
+    "source.sha256",
+)
 
 
 def utc_now() -> str:
@@ -23,6 +37,90 @@ def sha256_file(path: Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def expected_cpython_source_sha256(repository: Path) -> str:
+    checksum_path = (
+        repository
+        / "validation"
+        / "cross_platform"
+        / "cpython-3.12.13.sha256"
+    )
+    line = checksum_path.read_text(encoding="utf-8").strip()
+    try:
+        digest, filename = line.split("  ", 1)
+    except ValueError as exc:
+        raise RuntimeError("invalid pinned CPython checksum file") from exc
+    if (
+        filename != "Python-3.12.13.tar.xz"
+        or len(digest) != 64
+        or any(character not in "0123456789abcdef" for character in digest)
+    ):
+        raise RuntimeError("invalid pinned CPython 3.12.13 source identity")
+    return digest
+
+
+def import_python_build_evidence(
+    *,
+    repository: Path,
+    source: Path,
+    destination: Path,
+    label: str,
+    expected_system: str,
+    expected_machine: str,
+    current_executable: str,
+) -> tuple[dict[str, object], tuple[str, ...]]:
+    if label not in {"linux", "macos"}:
+        raise RuntimeError("Python build evidence label is invalid")
+    if not source.is_dir():
+        raise RuntimeError("Python build evidence directory is missing")
+    for name in CPYTHON_BUILD_FILES:
+        if not (source / name).is_file():
+            raise RuntimeError(f"Python build evidence is missing {name}")
+    metadata = json.loads(
+        (source / "build-metadata.json").read_text(encoding="utf-8")
+    )
+    expected_hash = expected_cpython_source_sha256(repository)
+    expected_target = "linux" if expected_system == "Linux" else "macos"
+    required = {
+        "builder_target": expected_target,
+        "python_implementation": "CPython",
+        "python_machine": expected_machine,
+        "python_system": expected_system,
+        "python_version": EXPECTED_PYTHON,
+        "source_sha256": expected_hash,
+        "source_tarball": "Python-3.12.13.tar.xz",
+        "source_url": (
+            "https://www.python.org/ftp/python/3.12.13/"
+            "Python-3.12.13.tar.xz"
+        ),
+    }
+    for key, value in required.items():
+        if metadata.get(key) != value:
+            raise RuntimeError(
+                f"Python build evidence field {key!r} does not match"
+            )
+    recorded_executable = Path(str(metadata.get("python_executable", "")))
+    if recorded_executable.resolve() != Path(current_executable).resolve():
+        raise RuntimeError(
+            "validation is not running with the recorded built interpreter"
+        )
+    source_hash_line = (source / "source.sha256").read_text(
+        encoding="utf-8"
+    ).strip()
+    if source_hash_line != f"{expected_hash}  Python-3.12.13.tar.xz":
+        raise RuntimeError("recorded CPython source checksum does not match")
+    if (
+        (source / "python-version.txt").read_text(encoding="utf-8").strip()
+        != f"Python {EXPECTED_PYTHON}"
+    ):
+        raise RuntimeError("recorded built Python version does not match")
+    copied_names = []
+    for name in CPYTHON_BUILD_FILES:
+        target_name = f"python-{label}-{name}"
+        shutil.copyfile(source / name, destination / target_name)
+        copied_names.append(target_name)
+    return metadata, tuple(copied_names)
 
 
 def run(
@@ -216,6 +314,42 @@ def write_json(path: Path, value: object) -> None:
     )
 
 
+def all_evidence_files(
+    directory: Path, *, exclude: Iterable[str] = ()
+) -> tuple[str, ...]:
+    excluded = set(exclude)
+    names = []
+    for path in directory.rglob("*"):
+        if path.is_symlink():
+            raise RuntimeError(
+                f"symlinks are forbidden in evidence: {path.relative_to(directory)}"
+            )
+        if path.is_file():
+            name = path.relative_to(directory).as_posix()
+            if name not in excluded:
+                names.append(name)
+    return tuple(sorted(names))
+
+
+def _safe_evidence_path(directory: Path, name: str) -> Path:
+    pure = PurePosixPath(name)
+    if (
+        not name
+        or "\\" in name
+        or pure.is_absolute()
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise RuntimeError(f"unsafe evidence filename: {name!r}")
+    path = directory.joinpath(*pure.parts)
+    if path.is_symlink():
+        raise RuntimeError(f"symlinks are forbidden in evidence: {name}")
+    try:
+        path.resolve().relative_to(directory.resolve())
+    except ValueError as exc:
+        raise RuntimeError(f"evidence path escapes its directory: {name}") from exc
+    return path
+
+
 def write_file_manifest(
     directory: Path, names: Iterable[str], destination: str
 ) -> str:
@@ -223,15 +357,9 @@ def write_file_manifest(
     unique_names = sorted(set(names))
     if destination in unique_names:
         raise RuntimeError("an evidence manifest cannot include itself")
+    _safe_evidence_path(directory, destination)
     for name in unique_names:
-        if (
-            not name
-            or name in {".", ".."}
-            or "/" in name
-            or "\\" in name
-        ):
-            raise RuntimeError(f"unsafe evidence filename: {name!r}")
-        path = directory / name
+        path = _safe_evidence_path(directory, name)
         if not path.is_file():
             raise RuntimeError(f"evidence file is missing: {name}")
         lines.append(f"{sha256_file(path)}  {name}\n")
@@ -254,16 +382,10 @@ def verify_file_manifest(directory: Path, manifest_name: str) -> str:
             or any(character not in "0123456789abcdef" for character in expected)
         ):
             raise RuntimeError(f"invalid SHA-256 in evidence manifest: {line!r}")
-        if (
-            not name
-            or name in {".", ".."}
-            or "/" in name
-            or "\\" in name
-            or name in seen
-        ):
+        if name in seen:
             raise RuntimeError(f"unsafe evidence manifest filename: {name!r}")
         seen.add(name)
-        path = directory / name
+        path = _safe_evidence_path(directory, name)
         if not path.is_file() or sha256_file(path) != expected:
             raise RuntimeError(f"evidence file hash mismatch: {name}")
     if not seen:

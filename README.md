@@ -107,7 +107,7 @@ The adversarial process test routes source and target actions through a
 separate fsyncing auditor, waits for the source PID to exit, starts a new
 target process, rejects duplicated action nonces, and compares the final hash
 with an uninterrupted control. The Apple Silicon test is present but skips
-unless it receives an image produced on a real Linux x86_64 host:
+unless it receives an image produced by qualified native Linux x86_64:
 
 ```bash
 CONTINUUM_LINUX_IMAGE=/path/to/linux-image.cont \

@@ -13,9 +13,9 @@ class CrossPlatformManualTests(unittest.TestCase):
         platform.system() == "Darwin"
         and platform.machine().lower() in {"arm64", "aarch64"}
         and bool(os.environ.get("CONTINUUM_LINUX_IMAGE")),
-        "requires Apple Silicon and CONTINUUM_LINUX_IMAGE from a real Linux x86_64 run",
+        "requires native Apple Silicon and an image from native Linux x86_64",
     )
-    def test_real_linux_x86_64_image_resumes_on_apple_silicon(self):
+    def test_native_linux_x86_64_image_resumes_on_apple_silicon(self):
         image = Path(os.environ["CONTINUUM_LINUX_IMAGE"])
         loaded = load_image(image)
         self.assertEqual(loaded.manifest["source"]["os"], "Linux")
@@ -26,4 +26,3 @@ class CrossPlatformManualTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
