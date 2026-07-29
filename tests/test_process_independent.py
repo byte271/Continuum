@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -78,7 +79,10 @@ class ProcessIndependentTests(unittest.TestCase):
             self.assertNotEqual(source_pid, target_pid)
             self.assertNotIn("START_SENTINEL", target_stdout)
             self.assertEqual(target_stdout.count("FINAL_COUNT 300000"), 1)
-            self.assertIn("Restored from Linux x86_64.", target_stderr)
+            self.assertIn(
+                f"Restored from {platform.system()} {platform.machine()}.",
+                target_stderr,
+            )
 
 
 if __name__ == "__main__":
