@@ -284,7 +284,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
 
     evidence = {
         "phase": "source",
-        "qualified_real_linux_x86_64": not markers,
+        "qualified_real_linux_x86_64": not markers and not args.rehearsal,
         "rehearsal": bool(args.rehearsal),
         "container_markers": markers,
         "source_system": platform.system(),
