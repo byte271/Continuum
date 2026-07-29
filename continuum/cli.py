@@ -12,10 +12,10 @@ import time
 import uuid
 from pathlib import Path
 
-from . import SUPPORTED_PYTHON, __version__
+from . import IR_VERSION, SUPPORTED_PYTHON, __version__
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
-from .image import inspect_image, load_image
+from .image import inspect_image, load_image, verify_image
 from .session import (
     SessionController,
     continuum_home,
@@ -71,8 +71,15 @@ def _parser() -> argparse.ArgumentParser:
     freeze.add_argument("session_id")
     freeze.add_argument("-o", "--output", required=True)
 
-    inspect = subparsers.add_parser("inspect", help="verify and inspect an image")
+    inspect = subparsers.add_parser(
+        "inspect", help="validate container metadata and inspect an image"
+    )
     inspect.add_argument("image")
+
+    verify = subparsers.add_parser(
+        "verify", help="deeply verify an image without resuming it"
+    )
+    verify.add_argument("image")
 
     resume = subparsers.add_parser("resume", help="restore an image in this process")
     resume.add_argument("image")
@@ -104,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             return _freeze(args)
         if args.command == "inspect":
             return _inspect(args)
+        if args.command == "verify":
+            return _verify(args)
         if args.command == "resume":
             return _resume(args)
         raise AssertionError(args.command)
@@ -116,7 +125,7 @@ def _require_runtime_version() -> None:
     current = platform.python_version()
     if current != SUPPORTED_PYTHON:
         raise ContinuumError(
-            f"this v0.1 prototype requires Python {SUPPORTED_PYTHON}; current is {current}"
+            f"this Continuum runtime requires Python {SUPPORTED_PYTHON}; current is {current}"
         )
 
 
@@ -197,6 +206,7 @@ def _doctor(args: argparse.Namespace) -> int:
         else:
             expected = {
                 "continuum_version": __version__,
+                "ir_version": IR_VERSION,
                 "python_version": SUPPORTED_PYTHON,
                 "system": current_system,
                 "architecture": current_machine,
@@ -211,6 +221,7 @@ def _doctor(args: argparse.Namespace) -> int:
 
     report = {
         "continuum_version": __version__,
+        "continuum_ir_version": IR_VERSION,
         "python_implementation": platform.python_implementation(),
         "python_version": current_python,
         "required_python_version": SUPPORTED_PYTHON,
@@ -225,7 +236,11 @@ def _doctor(args: argparse.Namespace) -> int:
             "macOS x86_64",
             "macOS arm64",
         ],
-        "verified_migration": "Linux x86_64 -> macOS arm64",
+        "verified_migration": (
+            "IR 0.2 Linux x86_64 -> macOS arm64 at "
+            "15bceefece050d06a1f504244a77434e31fd5228"
+        ),
+        "current_runtime_cross_platform": "unverified",
         "self_contained": bundle_manifest is not None,
         "bundle_manifest": manifest_path,
         "problems": problems,
@@ -233,7 +248,10 @@ def _doctor(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        print(f"Continuum version: {report['continuum_version']}")
+        print(
+            f"Continuum version: {report['continuum_version']} "
+            f"(IR {report['continuum_ir_version']})"
+        )
         print(
             "Runtime: "
             f"{report['python_implementation']} {report['python_version']} "
@@ -241,10 +259,14 @@ def _doctor(args: argparse.Namespace) -> int:
         )
         print(f"Host: {report['os']} {report['architecture']}")
         print(
-            "Compatible image targets: "
+            "Accepted image target metadata: "
             + ", ".join(report["compatible_image_targets"])
         )
-        print(f"Verified migration: {report['verified_migration']}")
+        print(f"Verified historical migration: {report['verified_migration']}")
+        print(
+            "Current runtime cross-platform proof: "
+            + report["current_runtime_cross_platform"]
+        )
         print(f"Continuum home: {report['continuum_home']}")
         print(
             "Resource policies: capture "
@@ -314,7 +336,7 @@ def _demo(args: argparse.Namespace) -> int:
     print("Same-machine continuation demonstration")
     print(f"Evidence directory: {output_dir}")
     print(f"Program: {program}")
-    print(f"Runtime: Python {SUPPORTED_PYTHON} / Continuum IR 0.2")
+    print(f"Runtime: Python {SUPPORTED_PYTHON} / Continuum IR {IR_VERSION}")
 
     with (
         source_stdout.open("w", encoding="utf-8") as stdout_handle,
@@ -573,6 +595,21 @@ def _inspect(args: argparse.Namespace) -> int:
     print(f"Resume location: {location['file']}:{location['line']}")
     print(f"Unsupported resources: {len(manifest['unsupported_resources'])}")
     print(f"Integrity: {report['integrity']}")
+    return 0
+
+
+def _verify(args: argparse.Namespace) -> int:
+    _require_runtime_version()
+    report = verify_image(args.image)
+    manifest = report["manifest"]
+    print(f"Continuum Image: {args.image}")
+    print("Verification: passed")
+    print(f"Integrity: {report['integrity']}")
+    print(f"Compatibility: {report['compatibility']}")
+    print(f"Object graph: {report['graph']}")
+    print(f"Frames: {report['frames']} ({manifest['frames']})")
+    print(f"Resources: {report['resources']} ({manifest['open_files']})")
+    print("Execution: not started")
     return 0
 
 

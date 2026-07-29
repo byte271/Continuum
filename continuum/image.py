@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import platform
+import random
 import sys
 import tempfile
 import zipfile
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import FORMAT_VERSION, SUPPORTED_PYTHON, __version__
+from . import FORMAT_VERSION, IR_VERSION, SUPPORTED_PYTHON, __version__
 from .codec import decode_graph, encode_graph
 from .errors import ImageError, ResourceError
 from .resources import ResourceManager
@@ -34,7 +35,7 @@ REQUIRED_ENTRIES = {
 }
 STATIC_ENTRIES = REQUIRED_ENTRIES | {"SIGNATURE"}
 SUPPORTED_CAPABILITIES = {
-    "continuum-ir-0.2",
+    f"continuum-ir-{IR_VERSION}",
     "explicit-frames",
     "graph-codec-0.1",
     "portable-readonly-files",
@@ -254,6 +255,7 @@ class LoadedImage:
     source: str
     heap: dict[str, Any]
     resources_document: dict[str, Any]
+    frames_document: dict[str, Any]
     bundles: dict[str, bytes]
 
     def restore_vm(
@@ -351,7 +353,16 @@ def load_image(path: str | os.PathLike[str]) -> LoadedImage:
         name = f"resources/files/{record['resource_id']}.bin"
         if name in raw:
             bundles[record["resource_id"]] = raw[name]
-    return LoadedImage(manifest, runtime, ir, source, heap, resources, bundles)
+    return LoadedImage(
+        manifest,
+        runtime,
+        ir,
+        source,
+        heap,
+        resources,
+        frames,
+        bundles,
+    )
 
 
 def inspect_image(path: str | os.PathLike[str]) -> dict[str, Any]:
@@ -360,6 +371,38 @@ def inspect_image(path: str | os.PathLike[str]) -> dict[str, Any]:
         "manifest": loaded.manifest,
         "runtime": loaded.runtime,
         "integrity": "verified",
+    }
+
+
+def verify_image(path: str | os.PathLike[str]) -> dict[str, Any]:
+    loaded = load_image(path)
+    loaded.validate_compatibility()
+    resource_placeholders = {
+        record["resource_id"]: object()
+        for record in loaded.resources_document["resources"]
+    }
+    state = decode_graph(loaded.heap, resource_placeholders)
+    random_state = random.getstate()
+    try:
+        vm = VirtualMachine.restore(
+            loaded.ir,
+            state,
+            ResourceManager("strict"),
+        )
+    finally:
+        random.setstate(random_state)
+    expected_frames = {"frames": _frame_metadata(vm)}
+    if loaded.frames_document != expected_frames:
+        raise ImageError(
+            "inspectable frame metadata does not match restorable state"
+        )
+    return {
+        "manifest": loaded.manifest,
+        "integrity": "verified",
+        "compatibility": "accepted",
+        "graph": "verified",
+        "frames": "verified",
+        "resources": "metadata-verified-not-opened",
     }
 
 

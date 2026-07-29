@@ -11,14 +11,11 @@ explicit-stack runtime. It does not migrate arbitrary CPython processes or
 native machine state.
 
 ```console
-# Linux x86_64
-$ python3 -m continuum run --file-policy bundle examples/demo.py examples/demo_input.txt 200000
-Continuum session: cont-a84c9f31b012
-$ python3 -m continuum freeze cont-a84c9f31b012 -o process.cont
-
-# Copy process.cont unchanged to Apple Silicon macOS
-$ python3 -m continuum resume process.cont --file-policy bundle
-Restored from Linux x86_64.
+$ python3 -m continuum doctor
+$ python3 -m continuum demo --output /tmp/continuum-demo
+Same-machine continuation demonstration
+...
+Combined output matches uninterrupted control: yes
 ```
 
 ## Verified cross-platform proof
@@ -44,6 +41,12 @@ The verified scope remains narrow: CPython 3.12.13 exactly, one thread, a
 controlled language subset, Continuum safe points, and read-only regular
 files. Classes, closures, generators, native extensions, subprocesses,
 sockets, writable files, and arbitrary CPython frames are unsupported.
+
+That proof is immutable evidence for Continuum IR 0.2 at the commit above.
+Current development uses IR 0.3 and runtime 0.2.0.dev0; its same-machine tests
+pass, but the Linux-to-macOS proof has not yet been rerun for that newer image
+format capability. The verified baseline is not being generalized to the
+development revision.
 
 ## Why this is a real continuation
 
@@ -82,6 +85,18 @@ The exact patch version is intentional while the image and IR are unstable.
 From a checkout of the repository:
 
 ```bash
+python3 -m continuum doctor
+python3 -m continuum demo --output /tmp/continuum-demo
+```
+
+The demo automatically launches an unchanged workload, freezes four active
+frames, deletes the original bundled input, resumes in a new process, runs an
+uninterrupted control, and retains its comparison evidence. It is explicitly
+a same-machine demonstration.
+
+To operate the CLI manually:
+
+```bash
 python3 -m continuum run --file-policy bundle \
   examples/demo.py examples/demo_input.txt 200000
 ```
@@ -98,8 +113,14 @@ From another terminal:
 python3 -m continuum sessions
 python3 -m continuum freeze cont-0123456789ab -o process.cont
 python3 -m continuum inspect process.cont
+python3 -m continuum verify process.cont
 python3 -m continuum resume process.cont
 ```
+
+`inspect` validates the container and prints metadata. `verify` additionally
+decodes the allowlisted graph and reconstructs frame state without opening
+resources, compiling bundled source, or starting execution. Neither command
+makes an untrusted image safe to resume.
 
 `bundle` puts read-only input-file bytes in the image. The default `strict`
 policy instead requires the same absolute path, content hash, size, and mtime
@@ -134,6 +155,17 @@ CONTINUUM_LINUX_IMAGE=/path/to/linux-image.cont \
 See [docs/TESTING.md](docs/TESTING.md) for the claim-to-test matrix.
 The stricter two-machine evidence workflow is in
 [validation/cross_platform/README.md](validation/cross_platform/README.md).
+The unchanged 50-program differential corpus and both measured reports are
+described in [COMPATIBILITY.md](COMPATIBILITY.md).
+
+## Installation status
+
+The repository contains a self-contained bundle builder and bootstrap
+installer under `packaging/`. A Linux x86_64 bundle containing exact CPython
+3.12.13 has been built, moved, installed into a fresh prefix, checked with
+`continuum doctor`, and used for a real run locally. The macOS arm64 bundle
+workflow and public release download have not yet been verified, so this
+README does not publish a one-line network installer command.
 
 ## Repository map
 
@@ -143,9 +175,12 @@ The stricter two-machine evidence workflow is in
 - `continuum/resources.py` — strict, relocate, and bundle file rebinding.
 - `continuum/image.py` — atomic `.cont` writer, reader, and integrity checks.
 - `continuum/session.py` — session records and atomic freeze control files.
+- `packaging/` — relocatable exact-runtime bundles and transactional installer.
+- `compatibility/` — unchanged 50-program CPython differential corpus.
 - `docs/adr/0001-portable-explicit-stack-vm.md` — architecture decision.
 - `FORMAT.md`, `SECURITY.md`, `LIMITATIONS.md`, `STATUS.md` — exact contracts.
 - `PERFORMANCE.md` — measured, reproducible prototype costs.
+- `ROADMAP.md` — concrete release-gated next milestones.
 - `LANGUAGE_SUPPORT.md`, `PORTABILITY.md`, `AUDIT.md` — tested subset,
   encoding/host assumptions, and confirmed defects.
 

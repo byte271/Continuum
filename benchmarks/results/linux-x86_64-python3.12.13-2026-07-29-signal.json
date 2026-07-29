@@ -1,0 +1,81 @@
+{
+  "boolean_safe_point_callback_ratio_median": 1.0684209069819253,
+  "checkpoint_phases_seconds": {
+    "complete_image_commit": 0.04920606000086991,
+    "graph_encode": 0.008120637001411524,
+    "heap_json_encode": 0.003086724998865975,
+    "image_load_and_validate": 0.004614598998159636,
+    "remaining_execution": 0.07904857700123102,
+    "resource_rebind_graph_decode_and_vm_restore": 0.0028098879993194714,
+    "resource_snapshot": 1.2235002941451967e-05
+  },
+  "compile": {
+    "median_seconds": 0.00021228499826975167,
+    "minimum_seconds": 0.00016707100076018833,
+    "samples_seconds": [
+      0.0007251790011650883,
+      0.000301148000289686,
+      0.00021228499826975167,
+      0.00019397200230741873,
+      0.00016707100076018833
+    ]
+  },
+  "environment": {
+    "continuum_version": "0.2.0.dev0",
+    "machine": "x86_64",
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "python_implementation": "CPython"
+  },
+  "image": {
+    "bytes": 21520,
+    "compression_ratio": 6.482760223048327,
+    "expanded_bytes": 139509,
+    "heap_objects": 19,
+    "instructions_before_freeze": 120014,
+    "resource_records": 0
+  },
+  "memory": {
+    "max_rss_platform_units": 26616,
+    "vm_peak_traced_bytes_separate_untimed_run": 399812
+  },
+  "native_control": {
+    "median_seconds": 0.000890638999408111,
+    "minimum_seconds": 0.0008526710007572547,
+    "samples_seconds": [
+      0.0022120009998616297,
+      0.00094226399960462,
+      0.0008668899972690269,
+      0.0008526710007572547,
+      0.000890638999408111
+    ]
+  },
+  "runtime_slowdown_median": 159.00172021970502,
+  "vm_control_with_boolean_polling": {
+    "median_seconds": 0.15130243200110272,
+    "minimum_seconds": 0.14593579600114026,
+    "samples_seconds": [
+      0.15130243200110272,
+      0.23348118699868792,
+      0.18816992500069318,
+      0.14637667200076976,
+      0.14593579600114026
+    ]
+  },
+  "vm_control_without_callback": {
+    "median_seconds": 0.14161313300064649,
+    "minimum_seconds": 0.14149488199836924,
+    "samples_seconds": [
+      0.14149488199836924,
+      0.14161313300064649,
+      0.1540875499995309,
+      0.14151551900067716,
+      0.15702759500345564
+    ]
+  },
+  "workload": {
+    "expected_answer": 333283335000,
+    "iterations": 10000,
+    "repetitions": 5
+  }
+}

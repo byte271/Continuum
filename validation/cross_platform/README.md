@@ -11,6 +11,11 @@ Linux x86_64 source job and native Apple Silicon macOS arm64 target job passed
 all 26 conditions. The unchanged image SHA-256 was
 `5a72261f61a3df2b71aec6882d3dbfc31196813a1bbfa5438cd9e9d069f324b9`.
 
+That result is immutable proof for IR 0.2/runtime 0.1.1.dev0. The current
+development revision writes IR 0.3 images. It must publish a clean commit,
+generate a new Linux image, and pass this entire workflow before IR 0.3 gains
+the same cross-platform status; the old image may not be reused.
+
 ## 1. Prepare the source repository
 
 Use a real Git repository containing the exact Continuum source:

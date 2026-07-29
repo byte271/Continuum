@@ -113,6 +113,7 @@ class GraphEncoder:
             ref, node = self._reference(value, "function")
             if node:
                 node["function_id"] = value.function_id
+                node["defaults"] = self._value(value.defaults)
             return ref
         if isinstance(value, BuiltinRef):
             ref, node = self._reference(value, "builtin_ref")
@@ -343,7 +344,13 @@ class GraphDecoder:
                 except ValueError as exc:
                     raise ImageError("invalid range in heap") from exc
             elif kind == "function":
-                result = FunctionValue(self._plain_str(node, "function_id"))
+                defaults = self._value(node.get("defaults"), depth + 1)
+                if not isinstance(defaults, tuple):
+                    raise ImageError("function defaults are not a tuple")
+                result = FunctionValue(
+                    self._plain_str(node, "function_id"),
+                    defaults,
+                )
             elif kind == "builtin_ref":
                 result = BuiltinRef(self._plain_str(node, "name"))
             elif kind == "module_ref":

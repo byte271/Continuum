@@ -21,11 +21,11 @@ class CompatibilityCorpusTests(unittest.TestCase):
         self.assertTrue(result["cp_python_output_match"])
 
     def test_unsupported_program_remains_in_corpus_results(self):
-        result = run_case(PROGRAMS / "default_parser_separator.py")
+        result = run_case(PROGRAMS / "comprehension_list.py")
         self.assertEqual(result["compile"], "failed")
         self.assertEqual(result["run"], "not_run")
         self.assertEqual(result["failure"]["stage"], "compile")
-        self.assertIn("default parameters", result["failure"]["message"])
+        self.assertIn("ListComp", result["failure"]["message"])
 
 
 if __name__ == "__main__":

@@ -52,6 +52,11 @@ targets are integer instruction indices. `function_id` values are portable
 identifiers, never addresses. The loader validates every opcode and jump
 target before constructing a VM.
 
+IR 0.3 function definitions include a validated `default_count`.
+`MAKE_FUNCTION` captures that many definition-time values from the operand
+stack. Function heap records contain the resulting defaults tuple, preserving
+mutable-default identity across calls and restoration.
+
 `code/program.py` is evidence and permits future recompilation checks. Resume
 does not execute it. Its SHA-256 must match the manifest,
 `modules/hashes.json`, and the source identity embedded in IR.
@@ -127,11 +132,11 @@ the author. Version 0.1 does not implement signatures and reports
 The current writer requires:
 
 - image format 0.1;
-- IR 0.2;
-- Continuum runtime 0.1.1.dev0;
+- IR 0.3;
+- Continuum runtime 0.2.0.dev0;
 - CPython 3.12.13;
 - target OS Linux or Darwin;
-- target architecture x86_64 or arm64.
+- target architecture x86_64 or arm64;
 - `native_payload_required: false`;
 - only the mandatory capabilities implemented by this runtime.
 

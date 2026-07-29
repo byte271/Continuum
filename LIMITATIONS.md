@@ -4,7 +4,7 @@
 
 The current runtime accepts a useful but small subset:
 
-- function definitions with required positional parameters;
+- function definitions with required and defaulted positional parameters;
 - assignments, arithmetic, comparisons, Boolean expressions;
 - `if`, `while`, portable `for` iteration, and loop `else`;
 - function calls and nested active Continuum frames;
@@ -17,7 +17,8 @@ Not supported:
 
 - classes and arbitrary instances;
 - closures, `nonlocal`, and `global`;
-- decorators and default/keyword-only/variadic parameters;
+- decorators, positional-only parameters, keyword-only parameters, and
+  variadic parameters;
 - generators, coroutines, async code, and context managers;
 - comprehensions and chained comparisons;
 - `try/except`, `with`, `yield`, pattern matching, and every Python syntax form
@@ -38,7 +39,7 @@ See `LANGUAGE_SUPPORT.md` for the test-backed feature-by-feature matrix.
 - host builtin/module calls are atomic and cannot be suspended internally;
 - no ordinary CPython frame or arbitrary PID attachment;
 - no active native-extension state;
-- no subprocesses, sockets, locks, signals, terminals modes, or child
+- no subprocesses, sockets, locks, application signal state, terminal modes, or child
   relationships;
 - no JIT and substantial interpreter slowdown.
 

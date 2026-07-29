@@ -6,10 +6,11 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from continuum.compiler import compile_source
 from continuum.errors import ImageError, UnsupportedObjectError
-from continuum.image import load_image, save_image
+from continuum.image import load_image, save_image, verify_image
 from continuum.vm import VirtualMachine
 
 
@@ -60,6 +61,59 @@ def replace_json_and_rehash(entries, name, document):
 
 
 class ImageTests(unittest.TestCase):
+    def test_verify_deeply_checks_image_without_executing_program(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            image = make_live_image(Path(temporary))
+            with (
+                patch(
+                    "continuum.vm.VirtualMachine.run",
+                    side_effect=AssertionError("image execution attempted"),
+                ),
+                patch(
+                    "continuum.compiler.compile_source",
+                    side_effect=AssertionError("source recompilation attempted"),
+                ),
+            ):
+                report = verify_image(image)
+            self.assertEqual(report["integrity"], "verified")
+            self.assertEqual(report["graph"], "verified")
+            self.assertEqual(report["frames"], "verified")
+            self.assertEqual(report["resources"], "metadata-verified-not-opened")
+
+    def test_verify_rejects_invalid_graph_with_valid_archive_checksums(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = make_live_image(root)
+            altered = root / "invalid-graph.cont"
+
+            def alter(entries):
+                heap = json.loads(entries["heap/objects.json"])
+                heap["root"] = {"t": "ref", "id": len(heap["objects"]) + 10}
+                replace_json_and_rehash(
+                    entries, "heap/objects.json", heap
+                )
+
+            rewrite_archive(image, altered, alter)
+            with self.assertRaisesRegex(ImageError, "invalid heap reference"):
+                verify_image(altered)
+
+    def test_verify_rejects_frame_metadata_that_disagrees_with_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = make_live_image(root)
+            altered = root / "invalid-frames.cont"
+
+            def alter(entries):
+                frames = json.loads(entries["frames/frames.json"])
+                frames["frames"][0]["operand_stack_depth"] += 1
+                replace_json_and_rehash(
+                    entries, "frames/frames.json", frames
+                )
+
+            rewrite_archive(image, altered, alter)
+            with self.assertRaisesRegex(ImageError, "frame metadata"):
+                verify_image(altered)
+
     def test_corrupted_image_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

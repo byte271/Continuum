@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import resource
 import statistics
@@ -96,12 +95,14 @@ def main() -> int:
         run_vm,
         args.repetitions,
     )
-    missing_request = (
-        Path(tempfile.gettempdir())
-        / f"continuum-benchmark-missing-request-{os.getpid()}"
-    )
+    freeze_requested = False
+
+    def poll_boolean(vm):
+        if freeze_requested:
+            raise AssertionError("benchmark freeze flag changed")
+
     polling_samples, polling_vm = measure(
-        lambda: run_vm(lambda vm: missing_request.exists()),
+        lambda: run_vm(poll_boolean),
         args.repetitions,
     )
     if (
@@ -172,9 +173,9 @@ def main() -> int:
             "compile": summary(compile_samples),
             "native_control": summary(native_samples),
             "vm_control_without_callback": summary(vm_samples),
-            "vm_control_with_request_path_polling": summary(polling_samples),
+            "vm_control_with_boolean_polling": summary(polling_samples),
             "runtime_slowdown_median": vm_median / native_median,
-            "safe_point_callback_ratio_median": (
+            "boolean_safe_point_callback_ratio_median": (
                 statistics.median(polling_samples) / vm_median
             ),
             "checkpoint_phases_seconds": {

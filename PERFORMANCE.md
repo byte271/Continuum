@@ -39,6 +39,42 @@ Environment: Continuum 0.1.1.dev0, CPython 3.12.13, Linux
 Every individual timing sample is in the JSON result. Memory tracing is a
 separate untimed VM run.
 
+## Safe-point notification measurement
+
+The post-proof baseline was recorded before changing session notification:
+
+```bash
+PYTHONPATH=. python3 benchmarks/measure.py \
+  --iterations 10000 --repetitions 5 \
+  --output benchmarks/results/linux-x86_64-python3.12.13-2026-07-29-post-proof-baseline.json
+```
+
+The identical workload was then measured after replacing per-safe-point
+request-path lookups with an in-memory Boolean set by `SIGUSR1`:
+
+```bash
+PYTHONPATH=. python3 benchmarks/measure.py \
+  --iterations 10000 --repetitions 5 \
+  --output benchmarks/results/linux-x86_64-python3.12.13-2026-07-29-signal.json
+```
+
+Both runs used CPython 3.12.13 on Linux 6.12.13 x86_64. They are separate
+five-sample runs, so the comparison does not treat native-control jitter as a
+runtime improvement.
+
+| Metric | Path-polling baseline | Signal/Boolean |
+| --- | ---: | ---: |
+| VM median, no callback | 0.141965 s | 0.141613 s |
+| VM median, session callback | 0.252846 s | 0.151302 s |
+| Callback / no-callback ratio | 1.781× | 1.068× |
+| VM / native-control ratio | 149.60× | 159.00× |
+
+The session-callback median fell 40.2%, and its overhead over the corresponding
+no-callback VM run fell from 78.1% to 6.8%. The underlying VM median did not
+materially change. The apparently worse VM/native ratio in the second run
+comes from its lower 0.000891-second native-control median, not a slower VM.
+All raw samples are retained in the two JSON files.
+
 ## Why the prior 590× number was invalid
 
 The original script timed the native loop normally, then enabled
@@ -65,8 +101,9 @@ optimization made was therefore to:
 - inline the run-loop form of `step`, while preserving public single-step
   execution.
 
-The portable image and IR are unchanged except for the intentional IR 0.2
-semantic version bump. The runtime cache is recreated after restore.
+The optimization described in this historical profile introduced IR 0.2.
+Current development uses IR 0.3 for positional default-argument state. Runtime
+instruction caches remain unpersisted and are recreated after restore.
 
 Post-optimization profile:
 
@@ -79,7 +116,7 @@ PYTHONPATH=. python3 -m benchmarks.profile_runtime \
 
 The same profiled workload fell from 1.602 s to 1.196 s (25.3%). The largest
 remaining region is `_execute`: 0.454 s self-time and 0.822 s cumulative.
-Safe-point request-path polling is separately large in CLI operation because
-it performs a filesystem existence check at every safe point.
+The later signal/Boolean change above removed request-path polling from idle
+safe points without changing checkpoint image contents.
 
 No native extension, JIT, or architecture-specific acceleration was added.

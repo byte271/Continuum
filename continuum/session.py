@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import time
 import uuid
 from datetime import datetime, timezone
@@ -85,6 +86,8 @@ class SessionController:
         self.request_path = self.requests_dir / f"{self.session_id}.json"
         self.response_path = self.responses_dir / f"{self.session_id}.json"
         self.control_token = uuid.uuid4().hex
+        self.freeze_requested = False
+        self._previous_signal_handler: Any = None
         self.record = {
             "session_id": self.session_id,
             "pid": os.getpid(),
@@ -100,10 +103,22 @@ class SessionController:
         }
 
     def start(self) -> None:
+        try:
+            self._previous_signal_handler = signal.signal(
+                signal.SIGUSR1,
+                self._handle_freeze_signal,
+            )
+        except (ValueError, OSError) as exc:
+            raise ContinuumError(
+                "Continuum sessions must start on the main POSIX thread"
+            ) from exc
         self.record["status"] = "running"
         self._write_record()
 
     def on_safe_point(self, vm: Any) -> None:
+        if not self.freeze_requested:
+            return
+        self.freeze_requested = False
         if not self.request_path.exists() or self.response_path.exists():
             return
         try:
@@ -157,6 +172,13 @@ class SessionController:
                     "error": f"session ended with status {status} before a safe point",
                 },
             )
+        if self._previous_signal_handler is not None:
+            signal.signal(signal.SIGUSR1, self._previous_signal_handler)
+            self._previous_signal_handler = None
+
+    def _handle_freeze_signal(self, signum: int, frame: Any) -> None:
+        if signum == signal.SIGUSR1:
+            self.freeze_requested = True
 
     def _write_record(self) -> None:
         _atomic_json(self.record_path, self.record)
@@ -210,6 +232,15 @@ def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
     }
     _create_json_exclusive(request_path, payload)
     try:
+        pid = record.get("pid")
+        if not isinstance(pid, int) or pid <= 0:
+            raise ContinuumError("session has no valid process identifier")
+        try:
+            os.kill(pid, signal.SIGUSR1)
+        except (ProcessLookupError, PermissionError, OSError) as exc:
+            raise ContinuumError(
+                f"cannot notify session process {pid}: {exc}"
+            ) from exc
         deadline = time.monotonic() + 30
         response = None
         while time.monotonic() < deadline:

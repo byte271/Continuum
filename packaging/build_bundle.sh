@@ -95,6 +95,8 @@ import platform
 import sys
 from pathlib import Path
 
+from continuum import IR_VERSION, __version__
+
 (
     manifest_path,
     target,
@@ -117,9 +119,10 @@ if platform.python_version() != "3.12.13":
 manifest = {
     "architecture": expected_architecture,
     "bundle_target": target,
-    "continuum_version": "0.1.1.dev0",
+    "continuum_version": __version__,
     "cpython_source_sha256": source_sha256,
     "git_commit": git_commit,
+    "ir_version": IR_VERSION,
     "python_implementation": platform.python_implementation(),
     "python_version": platform.python_version(),
     "self_contained": True,

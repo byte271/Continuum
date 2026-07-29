@@ -18,6 +18,8 @@ not make it safe to run.
 - no archive extraction;
 - cross-checked source, IR, runtime, capability, frame, heap, module, and
   resource metadata;
+- deep `continuum verify` mode that reconstructs the allowlisted object graph
+  and frame state without opening resources or dispatching program execution;
 - read-only regular-file resources only;
 - strict content verification for host-file rebinding;
 - 0600 session control records inside 0700 directories;
@@ -31,6 +33,13 @@ The VM intentionally executes the bundled IR with the current user's
 authority. The allowlist limits the current surface but is not a sandbox.
 Untrusted images should run in an OS sandbox with no secrets and minimal file
 access.
+
+`continuum inspect` checks container structure, hashes, schemas, and
+cross-document metadata. `continuum verify` goes further by allocating and
+decoding allowlisted objects and reconstructing VM frames, but it does not run
+the VM, compile bundled source, import application modules, or open file
+resources. Both commands process attacker-controlled data; neither authenticates
+the author nor proves that resuming the image is safe.
 
 ### Resource exhaustion
 

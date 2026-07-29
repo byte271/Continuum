@@ -3,7 +3,7 @@ class ContinuumError(Exception):
 
 
 class CompileError(ContinuumError):
-    """The source uses syntax outside the v0.1 executable subset."""
+    """The source uses syntax outside the Continuum executable subset."""
 
 
 class ExecutionError(ContinuumError):
@@ -24,4 +24,3 @@ class ResourceError(ContinuumError):
 
 class FrozenExecution(BaseException):
     """Internal non-error used only after an image is durably committed."""
-

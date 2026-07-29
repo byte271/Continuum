@@ -9,7 +9,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from continuum import SUPPORTED_PYTHON, __version__
+from continuum import IR_VERSION, SUPPORTED_PYTHON, __version__
 from continuum.cli import _doctor
 
 
@@ -22,7 +22,10 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(result, 0)
         report = json.loads(output.getvalue())
         self.assertEqual(report["continuum_version"], __version__)
+        self.assertEqual(report["continuum_ir_version"], IR_VERSION)
         self.assertEqual(report["python_version"], SUPPORTED_PYTHON)
+        self.assertEqual(report["current_runtime_cross_platform"], "unverified")
+        self.assertIn("IR 0.2", report["verified_migration"])
         self.assertFalse(report["self_contained"])
         self.assertEqual(report["problems"], [])
 
@@ -46,6 +49,7 @@ class DoctorTests(unittest.TestCase):
                 json.dumps(
                     {
                         "continuum_version": __version__,
+                        "ir_version": IR_VERSION,
                         "python_version": SUPPORTED_PYTHON,
                         "system": platform.system(),
                         "architecture": platform.machine(),

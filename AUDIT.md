@@ -7,6 +7,11 @@ commit `15bceefece050d06a1f504244a77434e31fd5228` in
 The historical untouched-baseline note below describes the original imported
 workspace, not the current repository identity.
 
+That immutable proof used IR 0.2/runtime 0.1.1.dev0. Current development uses
+IR 0.3/runtime 0.2.0.dev0 after adding positional default arguments. Its
+same-machine audit passes; cross-platform restoration of a newly written IR
+0.3 image remains unverified pending a fresh two-job proof run.
+
 ## Untouched baseline
 
 The first unmodified run did not reproduce the reported clean suite. The
@@ -31,7 +36,7 @@ consecutive runs after the fix.
 | Source to AST | Source bytes and SHA-256 | CPython AST | Parsing | Unsupported nodes fail compilation |
 | AST to IR | Logical operations, branches, function IDs, source lines, static local names | Instruction dictionaries | Compilation | This is lowering, not CPython bytecode/frame capture |
 | Runtime | Frames, PCs, locals, operand stacks, block/finally records, globals | Decoded instruction cache | Host builtin/method results when originally called | Host calls are atomic; native live values can block freeze |
-| Freeze request | Session/token/output request | Control-file paths | Liveness polling | Same-host filesystem control only |
+| Freeze request | Session/token/output request | Control-file paths and prior signal handler | Signal delivery and response waiting | Same-host POSIX signal/filesystem control only |
 | Graph capture | Reachable supported object graph, identity, cycles, RNG and resource references | Tagged graph document | Canonical set order key | Unsupported live values fail before destination creation |
 | Resource capture | File mode/options, identity, offset, optional bytes | Metadata records | SHA-256 and bundled byte read | Read-only regular files only; bundle capture detects content change |
 | Image commit | IR, source, graph, frames, resources, metadata | ZIP container/checksums | Hashes and compression | Directory fsync failure is currently ignored |
@@ -100,6 +105,9 @@ a partially evaluated expression while a nested Continuum callee is frozen.
 
 There is no checkpoint inside a host builtin, method, module call, file read,
 or individual arithmetic opcode. A request at those points is delayed.
+An atomically published request sends `SIGUSR1`; the handler only sets an
+in-memory Boolean. Idle safe points therefore do not access the filesystem,
+and the next safe point consumes the already published request.
 
 ## Remaining high-risk gaps
 
@@ -107,9 +115,9 @@ or individual arithmetic opcode. A request at those points is delayed.
   verified. Broader program and resource portability remains unmeasured.
 - Failure injection does not yet cover every ZIP write, fsync, checksum write,
   and rename boundary.
-- `inspect` validates hashes and document schemas but does not fully decode the
-  heap or execute IR; “integrity verified” is not a safety or authenticity
-  statement.
+- `inspect` validates hashes and document schemas but does not fully decode
+  the heap. `verify` additionally decodes the graph and reconstructs frames
+  without executing IR. Neither result is a safety or authenticity statement.
 - Dictionary delete/reinsert mutations that restore the identical key tuple
   are not version-detected.
 - The allowlisted host-call surface is not a sandbox.

@@ -102,7 +102,8 @@ class ResourceManager:
     ) -> PortableFile:
         if any(marker in mode for marker in ("w", "a", "x", "+")):
             raise ResourceError(
-                f"v0.1 checkpoints only read-only regular files; mode {mode!r} is unsupported"
+                "Continuum checkpoints only read-only regular files; "
+                f"mode {mode!r} is unsupported"
             )
         if mode not in {"r", "rt", "rb"}:
             raise ResourceError(f"unsupported file mode: {mode!r}")

@@ -208,7 +208,16 @@ class FunctionCompiler:
             self.emit("RETURN", line=line)
         elif isinstance(node, ast.FunctionDef):
             function_id = self.owner.compile_function(node, self)
-            self.emit("MAKE_FUNCTION", function_id, line)
+            for default in node.args.defaults:
+                self.expression(default)
+            self.emit(
+                "MAKE_FUNCTION",
+                {
+                    "function_id": function_id,
+                    "default_count": len(node.args.defaults),
+                },
+                line,
+            )
             self.emit("STORE_NAME", node.name, line)
             self.safe(node)
         elif isinstance(node, ast.Import):
@@ -466,6 +475,7 @@ class ProgramCompiler:
             "id": "__module__",
             "name": "__module__",
             "params": [],
+            "default_count": 0,
             "local_names": sorted(module.local_names),
             "code": module.code,
         }
@@ -485,13 +495,14 @@ class ProgramCompiler:
             raise CompileError(
                 f"{self.source_name}:{node.lineno}: decorators are unsupported"
             )
-        if node.args.posonlyargs or node.args.kwonlyargs or node.args.vararg or node.args.kwarg:
+        if (
+            node.args.posonlyargs
+            or node.args.kwonlyargs
+            or node.args.vararg
+            or node.args.kwarg
+        ):
             raise CompileError(
                 f"{self.source_name}:{node.lineno}: only positional parameters are supported"
-            )
-        if node.args.defaults or node.args.kw_defaults:
-            raise CompileError(
-                f"{self.source_name}:{node.lineno}: default parameters are unsupported"
             )
         parameters = [arg.arg for arg in node.args.args]
         local_names = collect_local_names(node.body, parameters)
@@ -513,6 +524,7 @@ class ProgramCompiler:
             "id": function_id,
             "name": node.name,
             "params": parameters,
+            "default_count": len(node.args.defaults),
             "local_names": sorted(local_names),
             "code": compiler.code,
         }

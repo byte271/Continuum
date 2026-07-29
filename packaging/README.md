@@ -9,9 +9,10 @@ continuum-macos-arm64/
 ```
 
 Each bundle contains the Continuum CLI, the exact CPython runtime, a runtime
-identity manifest, CPython build evidence, the demonstration source, the
-license, and installation documentation. The launcher sets `PYTHONHOME` and
-`PYTHONPATH` to the bundle before starting its private interpreter.
+identity manifest including the Continuum and IR versions, CPython build
+evidence, the demonstration source, the license, and installation
+documentation. The launcher sets `PYTHONHOME` and `PYTHONPATH` to the bundle
+before starting its private interpreter.
 
 Build a bundle in an empty output directory:
 

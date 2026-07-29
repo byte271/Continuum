@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import os
+import signal
 import tempfile
 import threading
 import time
@@ -84,6 +85,7 @@ while index < 10:
             first = threading.Thread(target=request, args=(first_image,))
             first.start()
             self._wait_for(controller.request_path)
+            self._wait_until(lambda: controller.freeze_requested)
             controller.on_safe_point(vm)
             first.join(timeout=5)
             self.assertFalse(first.is_alive())
@@ -98,12 +100,64 @@ while index < 10:
             second = threading.Thread(target=request, args=(second_image,))
             second.start()
             self._wait_for(controller.request_path)
+            self._wait_until(lambda: controller.freeze_requested)
             with self.assertRaises(FrozenExecution):
                 controller.on_safe_point(vm)
             second.join(timeout=5)
             self.assertFalse(second.is_alive())
             self.assertIsInstance(outcomes[1], dict)
             self.assertTrue(second_image.exists())
+            controller.finish("frozen")
+
+    def test_idle_safe_point_does_not_touch_the_filesystem(self):
+        source = "value = 1\n"
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"CONTINUUM_HOME": str(Path(temporary) / "home")},
+        ):
+            controller = SessionController(source, "idle.py")
+            controller.start()
+            try:
+                with patch.object(
+                    Path,
+                    "exists",
+                    side_effect=AssertionError("filesystem polled"),
+                ):
+                    controller.on_safe_point(object())
+            finally:
+                controller.finish("completed")
+
+    def test_freeze_request_notifies_source_after_atomic_publication(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"CONTINUUM_HOME": str(Path(temporary) / "home")},
+        ):
+            controller = SessionController("pass\n", "notify.py")
+            controller.start()
+            observed = {}
+
+            def fake_kill(pid, signum):
+                observed["pid"] = pid
+                observed["signal"] = signum
+                observed["request_exists"] = controller.request_path.exists()
+                raise ProcessLookupError("test stop")
+
+            try:
+                with patch("continuum.session.os.kill", side_effect=fake_kill):
+                    with self.assertRaisesRegex(
+                        ContinuumError, "cannot notify session process"
+                    ):
+                        request_freeze(
+                            controller.session_id,
+                            str(Path(temporary) / "state.cont"),
+                        )
+            finally:
+                controller.finish("completed")
+
+            self.assertEqual(observed["pid"], os.getpid())
+            self.assertEqual(observed["signal"], signal.SIGUSR1)
+            self.assertTrue(observed["request_exists"])
+            self.assertFalse(controller.request_path.exists())
 
     @staticmethod
     def _wait_for(path: Path) -> None:
@@ -113,6 +167,15 @@ while index < 10:
                 return
             time.sleep(0.005)
         raise AssertionError(f"timed out waiting for {path}")
+
+    @staticmethod
+    def _wait_until(predicate) -> None:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if predicate():
+                return
+            time.sleep(0.005)
+        raise AssertionError("timed out waiting for condition")
 
 
 if __name__ == "__main__":

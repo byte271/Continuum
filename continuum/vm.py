@@ -432,7 +432,9 @@ class VirtualMachine:
                 stack.pop()
                 frame.pc += 1
         elif op == "MAKE_FUNCTION":
-            stack.append(FunctionValue(arg))
+            default_count = arg["default_count"]
+            defaults = tuple(self._pop_many(stack, default_count))
+            stack.append(FunctionValue(arg["function_id"], defaults))
             frame.pc += 1
         elif op == "CALL":
             keyword_names = arg["keywords"]
@@ -458,7 +460,9 @@ class VirtualMachine:
                 self.result = value
         elif op == "IMPORT_MODULE":
             if arg not in ALLOWED_MODULES:
-                raise ImportError(f"module {arg!r} is not in the v0.1 allowlist")
+                raise ImportError(
+                    f"module {arg!r} is not in the Continuum allowlist"
+                )
             stack.append(ModuleRef(arg))
             frame.pc += 1
         elif op == "LOAD_ATTR":
@@ -500,7 +504,8 @@ class VirtualMachine:
             iterable = stack.pop()
             if not isinstance(iterable, (range, list, tuple, str, bytes, dict)):
                 raise TypeError(
-                    f"v0.1 cannot checkpoint iteration over {type(iterable).__name__}"
+                    "Continuum cannot checkpoint iteration over "
+                    f"{type(iterable).__name__}"
                 )
             stack.append(VMIterator(iterable))
             frame.pc += 1
@@ -565,9 +570,10 @@ class VirtualMachine:
         if definition is None:
             raise NameError(function.function_id)
         parameters = definition["params"]
-        if len(positional) + len(kwargs) != len(parameters):
+        if len(positional) > len(parameters):
             raise TypeError(
-                f"{definition['name']}() expects {len(parameters)} arguments"
+                f"{definition['name']}() takes at most "
+                f"{len(parameters)} arguments"
             )
         locals_dict: dict[str, Any] = {}
         for name, value in zip(parameters, positional):
@@ -576,8 +582,20 @@ class VirtualMachine:
             if name not in parameters or name in locals_dict:
                 raise TypeError(f"invalid argument {name!r}")
             locals_dict[name] = value
-        if len(locals_dict) != len(parameters):
-            raise TypeError(f"missing arguments for {definition['name']}()")
+        default_count = definition["default_count"]
+        if len(function.defaults) != default_count:
+            raise TypeError(
+                f"invalid default state for {definition['name']}()"
+            )
+        first_default = len(parameters) - default_count
+        for index, value in enumerate(function.defaults, first_default):
+            locals_dict.setdefault(parameters[index], value)
+        missing = [name for name in parameters if name not in locals_dict]
+        if missing:
+            raise TypeError(
+                f"missing arguments for {definition['name']}(): "
+                + ", ".join(missing)
+            )
         self.frames.append(Frame(function.function_id, 0, locals_dict))
 
     def _call_host(
@@ -743,11 +761,15 @@ def validate_ir(ir: dict[str, Any]) -> None:
             raise ImageError("function ID mismatch")
         code = definition.get("code")
         params = definition.get("params")
+        default_count = definition.get("default_count")
         local_names = definition.get("local_names")
         if (
             not isinstance(code, list)
             or not code
             or not isinstance(params, list)
+            or not isinstance(default_count, int)
+            or isinstance(default_count, bool)
+            or not 0 <= default_count <= len(params)
             or not isinstance(local_names, list)
             or any(not isinstance(name, str) for name in params + local_names)
             or not set(params) <= set(local_names)
@@ -767,3 +789,16 @@ def validate_ir(ir: dict[str, Any]) -> None:
                 target = instruction.get("arg")
                 if not isinstance(target, int) or not 0 <= target < len(code):
                     raise ImageError(f"invalid jump target in {function_id}")
+            if instruction["op"] == "MAKE_FUNCTION":
+                argument = instruction.get("arg")
+                if (
+                    not isinstance(argument, dict)
+                    or argument.get("function_id") not in functions
+                    or not isinstance(argument.get("default_count"), int)
+                    or isinstance(argument.get("default_count"), bool)
+                    or argument["default_count"]
+                    != functions[argument["function_id"]].get("default_count")
+                ):
+                    raise ImageError(
+                        f"invalid function constructor in {function_id}"
+                    )

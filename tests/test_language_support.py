@@ -77,7 +77,6 @@ for key in mapping:
 
     def test_unsupported_constructs_are_rejected_during_compilation(self):
         cases = {
-            "default arguments": "def f(value=1):\n    return value\n",
             "variadic positional parameters": "def f(*values):\n    return 1\n",
             "variadic keyword parameters": "def f(**values):\n    return 1\n",
             "keyword-only parameters": "def f(*, value):\n    return value\n",

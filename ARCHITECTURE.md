@@ -2,10 +2,10 @@
 
 ## Scope
 
-Version 0.1 executes a controlled subset of Python 3.12.13. The application
+Version 0.2 executes a controlled subset of Python 3.12.13. The application
 source is not edited by its author, but `continuum run` compiles it before
 execution. Suspension occurs only at Continuum `SAFEPOINT` instructions. IR
-0.2 places them after statements, after `for` iterator advancement and target
+0.3 places them after statements, after `for` iterator advancement and target
 binding, before loop back edges/continues, and at finally-body entry.
 
 This architecture restores a Continuum language-level continuation. It does
@@ -33,6 +33,13 @@ small Continuum instruction set or rejects a node with a filename and line.
 Functions become named IR blocks. Calls to a supported Python function push a
 new Continuum `Frame`; they do not recurse through a native CPython frame for
 the duration of the function.
+
+Positional default expressions execute once, from left to right, when the
+`def` statement runs. `MAKE_FUNCTION` captures the resulting portable values
+in the Continuum function object. Calls bind omitted trailing positional
+parameters from that stored tuple. Mutable defaults therefore retain identity
+and mutations across calls and checkpoints, matching Python's definition-time
+semantics.
 
 ### Execute
 

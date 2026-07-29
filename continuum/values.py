@@ -7,6 +7,7 @@ from typing import Any
 @dataclass(frozen=True)
 class FunctionValue:
     function_id: str
+    defaults: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True)

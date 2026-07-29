@@ -1,6 +1,6 @@
 # Python language support
 
-This matrix describes Continuum IR 0.2 as verified on CPython 3.12.13. The
+This matrix describes Continuum IR 0.3 as verified on CPython 3.12.13. The
 status words are literal: **supported**, **partially supported**,
 **explicitly rejected**, or **untested**. “Supported” applies only inside the
 closed builtin, method, module, object, and resource model documented here.
@@ -33,7 +33,7 @@ closed builtin, method, module, object, and resource model documented here.
 | --- | --- | --- |
 | Required positional parameters | supported | Argument count and binding validated |
 | Keyword calls | supported | Named binding, duplicate, missing, and unknown checks |
-| Default arguments | explicitly rejected | Definition-time default state not represented |
+| Positional default arguments | supported | Evaluated once at `def`; mutable identity, omission, keyword binding, image restoration, and every safe point tested |
 | Positional-only / keyword-only parameters | explicitly rejected | No calling convention support |
 | `*args` / `**kwargs` parameters | explicitly rejected | No variadic frame binding |
 | Starred / double-star call arguments | explicitly rejected | No expansion IR |

@@ -12,6 +12,7 @@
 | Assignment evaluation order | `test_assignment_rhs_precedes_subscript_target_evaluation` |
 | Loop cleanup/safe points/else | Semantic-audit tests |
 | Exceptions / try-finally where supported | Normal and pending-exception continuation tests |
+| Positional defaults | Definition-time, mutable-identity, keyword-binding, every-safe-point, and image tests |
 | File offsets / multiple files | Resource bundle tests |
 | Strict, relocate, bundle | Resource policy tests |
 | Random state | Resource and codec tests |
@@ -25,16 +26,24 @@
 | Linux x86_64 to macOS arm64 | Actions run 30489463484; 26/26 proof conditions passed |
 | No Linux code/pointers | Archive payload test plus explicit JSON format |
 | Source exits and target is new PID | Process-independent and adversarial tests |
+| Idle safe-point cost/path | Signal publication-order and no-filesystem-poll tests |
+| Deep non-executing verification | Invalid-graph, frame-metadata, and no-dispatch/no-recompile tests |
+| Unchanged real-program corpus | 50-program CPython/uninterrupted/same-process/new-process differential runner |
 
 ## Commands
 
 ```bash
 python3 -m unittest discover -s tests -v
+python3 -m compatibility.runner \
+  --output compatibility/results/local.json
 PYTHONPATH=. python3 benchmarks/measure.py \
   --iterations 10000 --repetitions 5
 ```
 
-Raw untouched-baseline and final verification logs are under `artifacts/`.
+The current Linux suite discovers 79 tests: 78 pass and the native
+Apple-Silicon-only test skips. Raw untouched-baseline and final proof logs are
+under `artifacts/`; corpus and benchmark samples are under their respective
+`results/` directories.
 
 ## Real cross-platform protocol
 
@@ -44,6 +53,10 @@ at commit `15bceefece050d06a1f504244a77434e31fd5228`. The source
 ran in a native x86_64 Linux GitHub-hosted VM and the unchanged image resumed
 in a new native process on a GitHub-hosted Apple Silicon macOS arm64 runner.
 All 26 proof conditions and the final evidence manifest passed.
+
+That run proves IR 0.2/runtime 0.1.1.dev0. Current IR 0.3 same-machine tests
+pass, but its cross-platform proof requires a new Linux image and has not yet
+run.
 
 Passing only manifest checks, containers, emulation, mocked platform strings,
 or this Linux dry run does not satisfy cross-platform acceptance.

@@ -15,7 +15,7 @@ source, or opaque bundled file bytes. Portable state uses:
 - explicit source OS, architecture, Python, runtime, IR, and capability
   metadata.
 
-IR 0.2 stores no Python `id()` values, machine pointers, native stack bytes,
+Current IR 0.3 stores no Python `id()` values, machine pointers, native stack bytes,
 executable pages, endianness-dependent structs, or host-sized packed
 integers. Runtime instruction caches are reconstructed from IR and are not
 serialized.
@@ -27,7 +27,7 @@ does not use that path on the target. `relocate` maps it explicitly.
 
 Resume rejects an image unless all of these checks pass:
 
-- format 0.1 and IR 0.2 schema validation;
+- format 0.1 and current IR 0.3 schema validation;
 - Continuum runtime implementation and exact runtime version;
 - CPython 3.12.13;
 - target OS in `Linux`, `Darwin`;
@@ -43,13 +43,13 @@ implementation and can still have platform-specific behavior.
 
 ## Tested combinations
 
-| Source | Target | Result |
-| --- | --- | --- |
-| Current Linux x86_64 process | New process on same Linux x86_64 host | verified |
-| Current Linux x86_64 process | Linux x86_64 dry-run of cross-platform package | verified; 6,603 combined output lines exactly matched uninterrupted control |
-| Linux x86_64 host | Second native Linux x86_64 environment | unverified |
-| Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
-| Any other native cross-architecture pair | Any | unverified |
+| Revision | Source | Target | Result |
+| --- | --- | --- | --- |
+| Current IR 0.3/runtime 0.2.0.dev0 | Current Linux x86_64 process | New process on same Linux x86_64 host | verified |
+| Current IR 0.3/runtime 0.2.0.dev0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | unverified; new proof image required |
+| Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
+| Any revision | Linux x86_64 host | Second native Linux x86_64 environment | unverified |
+| Any revision | Any other native cross-architecture pair | Any | unverified |
 
 The verified run is
 [GitHub Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
@@ -85,14 +85,15 @@ See `validation/cross_platform/README.md`. The source and target scripts:
 The successful run produced both `target-evidence.json` and a verified
 `final-evidence.sha256` manifest. The Linux and final Actions artifacts remain
 attached to the exact workflow run. This result does not generalize beyond the
-tested program, runtime version, resources, or platform pair.
+tested program, IR 0.2/runtime 0.1.1.dev0, resources, or platform pair. It is
+not evidence for images written by current IR 0.3.
 
 ## Remaining host assumptions
 
 - ZIP, JSON, SHA-256, file seeking, `fsync`, and atomic same-directory
   replacement behave as required by the host Python/OS.
-- Session control currently relies on same-filesystem hard links for atomic
-  no-clobber request publication.
+- Session control relies on POSIX `SIGUSR1` for notification and
+  same-filesystem hard links for atomic no-clobber request publication.
 - Directory `fsync` is attempted but its failure is ignored for host
   compatibility; this weakens the power-loss durability claim on hosts that
   do not support it.
