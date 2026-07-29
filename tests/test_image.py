@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
+import stat
 import tempfile
 import unittest
 import zipfile
@@ -61,6 +63,28 @@ def replace_json_and_rehash(entries, name, document):
 
 
 class ImageTests(unittest.TestCase):
+    def test_atomic_commit_fsync_uses_a_writable_archive_descriptor(self):
+        regular_file_fsyncs = 0
+        real_fsync = os.fsync
+
+        def require_writable_descriptor(descriptor):
+            nonlocal regular_file_fsyncs
+            if stat.S_ISREG(os.fstat(descriptor).st_mode):
+                # A zero-byte write is non-mutating, but fails with EBADF when
+                # the CRT descriptor was opened read-only (as on Windows).
+                os.write(descriptor, b"")
+                regular_file_fsyncs += 1
+            return real_fsync(descriptor)
+
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "continuum.image.os.fsync",
+            side_effect=require_writable_descriptor,
+        ):
+            image = make_live_image(Path(temporary))
+            self.assertTrue(image.exists())
+
+        self.assertEqual(regular_file_fsyncs, 1)
+
     def test_new_image_declares_only_supported_platform_pairs(self):
         with tempfile.TemporaryDirectory() as temporary:
             image = make_live_image(Path(temporary))

@@ -85,7 +85,10 @@ while index < 10:
             first = threading.Thread(target=request, args=(first_image,))
             first.start()
             self._wait_for(controller.request_path)
-            self._wait_until(lambda: controller.freeze_requested)
+            if controller._signal_notifications:
+                self._wait_until(lambda: controller.freeze_requested)
+            else:
+                controller._next_request_poll = 0.0
             controller.on_safe_point(vm)
             first.join(timeout=5)
             self.assertFalse(first.is_alive())
@@ -100,7 +103,10 @@ while index < 10:
             second = threading.Thread(target=request, args=(second_image,))
             second.start()
             self._wait_for(controller.request_path)
-            self._wait_until(lambda: controller.freeze_requested)
+            if controller._signal_notifications:
+                self._wait_until(lambda: controller.freeze_requested)
+            else:
+                controller._next_request_poll = 0.0
             with self.assertRaises(FrozenExecution):
                 controller.on_safe_point(vm)
             second.join(timeout=5)

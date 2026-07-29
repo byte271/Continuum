@@ -233,7 +233,10 @@ def save_image(
         ) as archive:
             for name, content in sorted(entries.items()):
                 archive.writestr(name, content)
-        with open(temporary_name, "rb") as handle:
+        # Windows rejects fsync() on a read-only CRT descriptor with EBADF.
+        # Reopen the completed archive read/write so the durability barrier has
+        # identical semantics on POSIX and Windows before the atomic replace.
+        with open(temporary_name, "r+b") as handle:
             os.fsync(handle.fileno())
         os.replace(temporary_name, destination)
         temporary_name = None
