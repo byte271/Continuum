@@ -30,11 +30,31 @@ $SourceArchive = Join-Path $WorkRoot "Python-3.12.13.tar.xz"
 $SourceRoot = Join-Path $WorkRoot "Python-3.12.13"
 $BuildLog = Join-Path $EvidenceDir "python-build.log"
 $LayoutLog = Join-Path $EvidenceDir "python-layout.log"
+$VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
 
 New-Item -ItemType Directory -Path $WorkRoot | Out-Null
 New-Item -ItemType Directory -Path $EvidenceDir | Out-Null
 
 try {
+    if (-not (Test-Path -LiteralPath $VsWhere -PathType Leaf)) {
+        throw "vswhere.exe is required to select a supported native toolset"
+    }
+    $VisualStudioVersion = (
+        & $VsWhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationVersion
+    ).Trim()
+    $VisualStudioMajor = [int]($VisualStudioVersion.Split(".")[0])
+    $PlatformToolset = switch ($VisualStudioMajor) {
+        17 { "v143" }
+        18 { "v145" }
+        default {
+            throw "unsupported Visual Studio major version: $VisualStudioMajor"
+        }
+    }
+
     Invoke-WebRequest -Uri $SourceUrl -OutFile $SourceArchive
     $ActualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $SourceArchive).Hash.ToLowerInvariant()
     if ($ActualHash -ne $ExpectedHash) {
@@ -47,7 +67,8 @@ try {
     }
 
     $BuildScript = Join-Path $SourceRoot "PCbuild\build.bat"
-    & $BuildScript -p x64 2>&1 | Tee-Object -FilePath $BuildLog
+    & $BuildScript -p x64 "/p:PlatformToolset=$PlatformToolset" 2>&1 |
+        Tee-Object -FilePath $BuildLog
     if ($LASTEXITCODE -ne 0) {
         throw "CPython PCbuild failed with exit code $LASTEXITCODE"
     }
@@ -101,30 +122,25 @@ print(json.dumps({
         throw "built interpreter is not native Windows x86_64 CPython 3.12.13"
     }
 
-    $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
-    if (Test-Path -LiteralPath $VsWhere -PathType Leaf) {
-        & $VsWhere -latest -products * -format json |
-            Set-Content -LiteralPath (Join-Path $EvidenceDir "visual-studio.json") -Encoding utf8
-        $VisualStudioRoot = (
-            & $VsWhere `
-                -latest `
-                -products * `
-                -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-                -property installationPath
-        ).Trim()
-        $DeveloperCommand = Join-Path $VisualStudioRoot "Common7\Tools\VsDevCmd.bat"
-        $CompilerIdentity = & cmd.exe /d /s /c (
-            "`"$DeveloperCommand`" -no_logo -arch=x64 -host_arch=x64 " +
-            ">nul && cl.exe 2>&1"
-        )
-        if (($CompilerIdentity -join "`n") -notmatch "Compiler Version") {
-            throw "could not record the Microsoft C/C++ compiler identity"
-        }
-        $CompilerIdentity |
-            Set-Content -LiteralPath (Join-Path $EvidenceDir "compiler-identity.txt") -Encoding utf8
-    } else {
-        throw "vswhere.exe was not found after a successful CPython build"
+    & $VsWhere -latest -products * -format json |
+        Set-Content -LiteralPath (Join-Path $EvidenceDir "visual-studio.json") -Encoding utf8
+    $VisualStudioRoot = (
+        & $VsWhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+    ).Trim()
+    $DeveloperCommand = Join-Path $VisualStudioRoot "Common7\Tools\VsDevCmd.bat"
+    $CompilerIdentity = & cmd.exe /d /s /c (
+        "`"$DeveloperCommand`" -no_logo -arch=x64 -host_arch=x64 " +
+        ">nul && cl.exe 2>&1"
+    )
+    if (($CompilerIdentity -join "`n") -notmatch "Compiler Version") {
+        throw "could not record the Microsoft C/C++ compiler identity"
     }
+    $CompilerIdentity |
+        Set-Content -LiteralPath (Join-Path $EvidenceDir "compiler-identity.txt") -Encoding utf8
 
     $SourceUrl | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-source-url.txt") -Encoding ascii
     "$ExpectedHash  Python-3.12.13.tar.xz" |
@@ -132,14 +148,14 @@ print(json.dumps({
     $Version | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-version.txt") -Encoding ascii
     $Python | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-executable.txt") -Encoding utf8
     $Identity | Set-Content -LiteralPath (Join-Path $EvidenceDir "python-identity.json") -Encoding utf8
-    "PCbuild\build.bat -p x64" |
+    "PCbuild\build.bat -p x64 /p:PlatformToolset=$PlatformToolset" |
         Set-Content -LiteralPath (Join-Path $EvidenceDir "python-build-command.txt") -Encoding ascii
     "python.bat PC\layout --copy <prefix> --preset-default" |
         Set-Content -LiteralPath (Join-Path $EvidenceDir "python-layout-command.txt") -Encoding ascii
 
     $Metadata = [ordered]@{
         builder_target = "windows"
-        build_command = "PCbuild\build.bat -p x64"
+        build_command = "PCbuild\build.bat -p x64 /p:PlatformToolset=$PlatformToolset"
         install_prefix = $InstallPrefix
         layout_command = "python.bat PC\layout --copy <prefix> --preset-default"
         python_executable = $Python
@@ -151,6 +167,8 @@ print(json.dumps({
         source_sha256 = $ExpectedHash
         source_tarball = "Python-3.12.13.tar.xz"
         source_url = $SourceUrl
+        visual_studio_version = $VisualStudioVersion
+        platform_toolset = $PlatformToolset
     }
     $Metadata |
         ConvertTo-Json -Depth 5 |

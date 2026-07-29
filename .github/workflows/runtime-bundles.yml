@@ -208,9 +208,10 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: continuum-windows-x86_64-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             ${{ runner.temp }}/bundles/continuum-windows-x86_64.zip
             ${{ runner.temp }}/bundles/continuum-windows-x86_64.zip.sha256
+            ${{ runner.temp }}/bundles/continuum-windows-x86_64-build-evidence
             ${{ runner.temp }}/windows-continuation-evidence
           retention-days: 30
