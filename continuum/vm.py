@@ -14,7 +14,9 @@ from . import IR_VERSION
 from .errors import ExecutionError, FrozenExecution, ImageError
 from .resources import PortableFile, ResourceManager
 from .values import (
+    EMPTY,
     BoundAttrRef,
+    Cell,
     BuiltinRef,
     FunctionValue,
     ModuleAttrRef,
@@ -195,6 +197,9 @@ class Frame:
     stack: list[Any] = field(default_factory=list)
     blocks: list[dict[str, Any]] = field(default_factory=list)
     finally_reasons: list[dict[str, Any]] = field(default_factory=list)
+    # Closed-over bindings, kept separate from `locals` so a captured name is
+    # one shared Cell rather than a per-frame copy.
+    cells: dict[str, Cell] = field(default_factory=dict)
 
     def to_state(self) -> dict[str, Any]:
         return {
@@ -204,6 +209,7 @@ class Frame:
             "stack": self.stack,
             "blocks": self.blocks,
             "finally_reasons": self.finally_reasons,
+            "cells": self.cells,
         }
 
     @classmethod
@@ -215,6 +221,7 @@ class Frame:
             stack=state["stack"],
             blocks=state["blocks"],
             finally_reasons=state["finally_reasons"],
+            cells=state.get("cells", {}),
         )
 
 
@@ -451,15 +458,42 @@ class VirtualMachine:
                 stack.pop()
                 frame.pc += 1
         elif op == "MAKE_FUNCTION":
-            # Keyword defaults were pushed after positional ones, so they come
-            # off first.
+            # Pushed in order: defaults, keyword defaults, closure cells.
+            closure = tuple(self._pop_many(stack, arg.get("closure_count", 0)))
+            for item in closure:
+                if not isinstance(item, Cell):
+                    raise ExecutionError("closure entry is not a cell")
             keyword_defaults = tuple(
                 self._pop_many(stack, arg.get("kw_default_count", 0))
             )
             defaults = tuple(self._pop_many(stack, arg["default_count"]))
             stack.append(
-                FunctionValue(arg["function_id"], defaults, keyword_defaults)
+                FunctionValue(
+                    arg["function_id"], defaults, keyword_defaults, closure
+                )
             )
+            frame.pc += 1
+        elif op == "MAKE_CELL":
+            frame.cells[arg] = Cell()
+            frame.pc += 1
+        elif op == "LOAD_CLOSURE":
+            cell = frame.cells.get(arg)
+            if cell is None:
+                raise ExecutionError(f"no cell for {arg!r}")
+            stack.append(cell)
+            frame.pc += 1
+        elif op == "LOAD_DEREF":
+            cell = frame.cells.get(arg)
+            if cell is None:
+                raise ExecutionError(f"no cell for {arg!r}")
+            stack.append(cell.get(arg))
+            frame.pc += 1
+        elif op == "STORE_DEREF":
+            cell = frame.cells.get(arg)
+            if cell is None:
+                raise ExecutionError(f"no cell for {arg!r}")
+            self._require_stack(stack, 1, op)
+            cell.set(stack.pop())
             frame.pc += 1
         elif op == "LIST_EXTEND":
             self._require_stack(stack, 2, op)
@@ -638,6 +672,12 @@ class VirtualMachine:
             if not isinstance(exception, BaseException):
                 raise ExecutionError("RERAISE without a live exception")
             raise exception
+        elif op == "DELETE_CELL":
+            cell = frame.cells.get(arg)
+            if cell is None:
+                raise ExecutionError(f"no cell for {arg!r}")
+            cell.value = EMPTY
+            frame.pc += 1
         elif op == "DELETE_NAME":
             # `except E as name` unbinds `name` when the handler exits, even
             # if the handler never assigned it again.
@@ -737,7 +777,20 @@ class VirtualMachine:
                 f"argument{'' if len(missing) == 1 else 's'}: "
                 + self._name_list(missing)
             )
-        self.frames.append(Frame(function.function_id, 0, locals_dict))
+        free = definition.get("freevars", [])
+        if len(function.closure) != len(free):
+            raise TypeError(f"invalid closure state for {name}()")
+        cells: dict[str, Cell] = dict(zip(free, function.closure))
+        # A parameter that a nested function captures is moved into its cell,
+        # so the callee and every closure it builds read one binding.
+        for cellvar in definition.get("cellvars", []):
+            cell = Cell()
+            if cellvar in locals_dict:
+                cell.set(locals_dict.pop(cellvar))
+            cells[cellvar] = cell
+        self.frames.append(
+            Frame(function.function_id, 0, locals_dict, cells=cells)
+        )
 
     @staticmethod
     def _argument_count_phrase(definition: dict[str, Any]) -> str:
@@ -891,6 +944,24 @@ class VirtualMachine:
             frame.finally_reasons, list
         ):
             raise ImageError(f"invalid control state: {frame.function_id}")
+        # A restored frame must hold exactly the cells its function closes
+        # over, and each must really be a cell: a wrong shape here would only
+        # surface later as a misread binding.
+        if not isinstance(frame.cells, dict):
+            raise ImageError(f"invalid cell state: {frame.function_id}")
+        expected = set(definition.get("cellvars", [])) | set(
+            definition.get("freevars", [])
+        )
+        if set(frame.cells) != expected:
+            raise ImageError(
+                f"frame {frame.function_id} does not carry its closed-over "
+                "bindings"
+            )
+        for name, cell in frame.cells.items():
+            if not isinstance(name, str) or not isinstance(cell, Cell):
+                raise ImageError(
+                    f"invalid cell binding in {frame.function_id}"
+                )
         for block in frame.blocks:
             if not isinstance(block, dict):
                 raise ImageError(f"invalid control block: {frame.function_id}")
@@ -972,6 +1043,7 @@ VALID_OPS = {
     "CALL_EX",
     "COMPARE",
     "CONST",
+    "DELETE_CELL",
     "DELETE_NAME",
     "DICT_MERGE",
     "DUP_TOP",
@@ -988,7 +1060,10 @@ VALID_OPS = {
     "LOAD_ATTR",
     "LOAD_NAME",
     "LIST_EXTEND",
+    "LOAD_CLOSURE",
+    "LOAD_DEREF",
     "LOAD_SUBSCR",
+    "MAKE_CELL",
     "MAKE_FUNCTION",
     "MATCH_EXC",
     "POP_BLOCK",
@@ -999,6 +1074,7 @@ VALID_OPS = {
     "SAFEPOINT",
     "SETUP_EXCEPT",
     "SETUP_FINALLY",
+    "STORE_DEREF",
     "STORE_NAME",
     "STORE_SUBSCR_VALUE_FIRST",
     "UNARY",

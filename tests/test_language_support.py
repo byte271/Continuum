@@ -79,18 +79,11 @@ for key in mapping:
         cases = {
             "duplicate parameter name": "def f(a, *, a):\n    return a\n",
             "global declaration": "def f():\n    global value\n    value = 1\n",
-            "nonlocal declaration": (
+            "nonlocal without an enclosing binding": (
                 "def outer():\n"
-                "    value = 1\n"
                 "    def inner():\n"
-                "        nonlocal value\n"
-                "        value = 2\n"
-            ),
-            "closure capture": (
-                "def outer():\n"
-                "    value = 1\n"
-                "    def inner():\n"
-                "        return value\n"
+                "        nonlocal missing\n"
+                "        missing = 2\n"
             ),
             "class definition": "class Value:\n    pass\n",
             "list comprehension": "values = [x for x in range(3)]\n",

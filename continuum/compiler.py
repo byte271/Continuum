@@ -85,6 +85,121 @@ def collect_local_names(body: list[ast.stmt], parameters: list[str]) -> set[str]
     return collector.names
 
 
+class ScopeUseCollector(ast.NodeVisitor):
+    """Names read or declared `nonlocal` in one scope, ignoring nested ones."""
+
+    def __init__(self) -> None:
+        self.used: set[str] = set()
+        self.nonlocals: set[str] = set()
+        self.functions: list[ast.FunctionDef] = []
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        # Defaults and decorators are evaluated in the enclosing scope.
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                self.visit(default)
+        self.functions.append(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.functions.append(node)
+
+    def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
+        self.nonlocals.update(node.names)
+
+    def visit_Name(self, node: ast.Name) -> None:
+        self.used.add(node.id)
+
+
+class Scope:
+    """One lexical scope, used to decide which bindings need cells."""
+
+    def __init__(
+        self,
+        node: ast.AST | None,
+        parent: "Scope | None",
+        is_function: bool,
+        bound: set[str],
+    ) -> None:
+        self.node = node
+        self.parent = parent
+        self.is_function = is_function
+        self.bound = bound
+        self.used: set[str] = set()
+        self.nonlocals: set[str] = set()
+        self.children: list[Scope] = []
+        self.cellvars: set[str] = set()
+        self.freevars: set[str] = set()
+
+    def binds_in_function_ancestor(self, name: str) -> bool:
+        ancestor = self.parent
+        while ancestor is not None and ancestor.is_function:
+            if name in ancestor.bound:
+                return True
+            ancestor = ancestor.parent
+        return False
+
+
+def build_scope(
+    body: list[ast.stmt],
+    parameters: list[str],
+    node: ast.AST | None,
+    parent: Scope | None,
+    is_function: bool,
+) -> Scope:
+    scope = Scope(node, parent, is_function, collect_local_names(body, parameters))
+    collector = ScopeUseCollector()
+    for statement in body:
+        collector.visit(statement)
+    scope.used = collector.used
+    scope.nonlocals = collector.nonlocals
+    for child_node in collector.functions:
+        arguments = child_node.args
+        child_parameters = [
+            argument.arg
+            for argument in (
+                *arguments.posonlyargs,
+                *arguments.args,
+                *arguments.kwonlyargs,
+            )
+        ]
+        if arguments.vararg:
+            child_parameters.append(arguments.vararg.arg)
+        if arguments.kwarg:
+            child_parameters.append(arguments.kwarg.arg)
+        scope.children.append(
+            build_scope(
+                child_node.body, child_parameters, child_node, scope, True
+            )
+        )
+    return scope
+
+
+def resolve_scope(scope: Scope) -> None:
+    """Mark captured bindings, bottom up.
+
+    A name a nested scope needs and this scope binds becomes a cell here. A
+    name neither scope binds keeps travelling outward until a function scope
+    binds it; if none does, it is an ordinary global.
+    """
+
+    for child in scope.children:
+        resolve_scope(child)
+    needed = set(scope.used) | set(scope.nonlocals)
+    for child in scope.children:
+        needed |= child.freevars
+        scope.cellvars.update(child.freevars & scope.bound)
+    if scope.is_function:
+        for name in needed:
+            if name not in scope.bound and scope.binds_in_function_ancestor(name):
+                scope.freevars.add(name)
+    # `nonlocal x` binds x in this scope through the enclosing cell, so it is
+    # free here rather than local.
+    scope.bound -= scope.nonlocals
+    scope.freevars |= scope.nonlocals & {
+        name for name in scope.nonlocals if scope.binds_in_function_ancestor(name)
+    }
+
+
 class FunctionCompiler:
     def __init__(
         self,
@@ -93,12 +208,16 @@ class FunctionCompiler:
         name: str,
         local_names: set[str],
         enclosing_locals: tuple[set[str], ...] = (),
+        scope: "Scope | None" = None,
     ):
         self.owner = owner
         self.function_id = function_id
         self.name = name
         self.local_names = local_names
         self.enclosing_locals = enclosing_locals
+        self.scope = scope
+        self.cellvars = set(scope.cellvars) if scope else set()
+        self.freevars = sorted(scope.freevars) if scope else []
         self.code: list[dict[str, Any]] = []
         self.loops: list[LoopContext] = []
         # Enclosing protected regions in this function. `protect_depth` counts
@@ -106,6 +225,17 @@ class FunctionCompiler:
         # cleanup must still run before control leaves.
         self.protect_depth = 0
         self.finally_depth = 0
+
+    def is_cell(self, name: str) -> bool:
+        return name in self.cellvars or name in self.freevars
+
+    def load_name(self, name: str, line: int) -> None:
+        self.emit("LOAD_DEREF" if self.is_cell(name) else "LOAD_NAME", name, line)
+
+    def store_name(self, name: str, line: int) -> None:
+        self.emit(
+            "STORE_DEREF" if self.is_cell(name) else "STORE_NAME", name, line
+        )
 
     def emit(self, op: str, arg: Any = None, line: int = 0) -> int:
         instruction = {"op": op, "line": line}
@@ -136,10 +266,10 @@ class FunctionCompiler:
         elif isinstance(node, ast.AugAssign):
             if not isinstance(node.target, ast.Name):
                 self.unsupported(node, "augmented assignment to non-name")
-            self.emit("LOAD_NAME", node.target.id, line)
+            self.load_name(node.target.id, line)
             self.expression(node.value)
             self.emit("BINARY", self.lookup(BIN_OPS, node.op, node), line)
-            self.emit("STORE_NAME", node.target.id, line)
+            self.store_name(node.target.id, line)
             self.safe(node)
         elif isinstance(node, ast.Expr):
             self.expression(node.value)
@@ -224,7 +354,7 @@ class FunctionCompiler:
                 self.expression(node.value)
             self.emit("RETURN", line=line)
         elif isinstance(node, ast.FunctionDef):
-            function_id = self.owner.compile_function(node, self)
+            function_id, captured = self.owner.compile_function(node, self)
             for default in node.args.defaults:
                 self.expression(default)
             keyword_defaults = [
@@ -234,16 +364,21 @@ class FunctionCompiler:
             ]
             for default in keyword_defaults:
                 self.expression(default)
+            for name in captured:
+                # The same cell object the enclosing frame holds, so the two
+                # scopes share one binding rather than a copy.
+                self.emit("LOAD_CLOSURE", name, line)
             self.emit(
                 "MAKE_FUNCTION",
                 {
                     "function_id": function_id,
                     "default_count": len(node.args.defaults),
                     "kw_default_count": len(keyword_defaults),
+                    "closure_count": len(captured),
                 },
                 line,
             )
-            self.emit("STORE_NAME", node.name, line)
+            self.store_name(node.name, line)
             self.safe(node)
         elif isinstance(node, ast.Import):
             for alias in node.names:
@@ -251,7 +386,7 @@ class FunctionCompiler:
                     self.unsupported(node, "dotted import without 'as'")
                 self.owner.imports.add(alias.name)
                 self.emit("IMPORT_MODULE", alias.name, line)
-                self.emit("STORE_NAME", alias.asname or alias.name, line)
+                self.store_name(alias.asname or alias.name, line)
             self.safe(node)
         elif isinstance(node, ast.ImportFrom):
             self.unsupported(node, "from ... import")
@@ -272,8 +407,13 @@ class FunctionCompiler:
             self.compile_try(node)
         elif isinstance(node, ast.Pass):
             self.safe(node)
-        elif isinstance(node, (ast.Global, ast.Nonlocal)):
-            self.unsupported(node, "global/nonlocal declaration")
+        elif isinstance(node, ast.Nonlocal):
+            for name in node.names:
+                if name not in self.freevars:
+                    self.unsupported(node, f"no binding for nonlocal {name!r}")
+            self.safe(node)
+        elif isinstance(node, ast.Global):
+            self.unsupported(node, "global declaration")
         else:
             self.unsupported(node)
 
@@ -349,13 +489,17 @@ class FunctionCompiler:
             if handler.name is None:
                 self.emit("POP_TOP", line=line)
             else:
-                self.emit("STORE_NAME", handler.name, line)
+                self.store_name(handler.name, line)
                 self.local_names.add(handler.name)
             self.emit("SAFEPOINT", line=line)
             self.statements(handler.body)
             if handler.name is not None:
                 # CPython unbinds the handler name when the block exits.
-                self.emit("DELETE_NAME", handler.name, line)
+                self.emit(
+                    "DELETE_CELL" if self.is_cell(handler.name) else "DELETE_NAME",
+                    handler.name,
+                    line,
+                )
             end_jumps.append(self.emit("JUMP", -1, line))
             if next_handler is not None:
                 self.patch(next_handler, len(self.code))
@@ -371,7 +515,7 @@ class FunctionCompiler:
     def assignment(self, target: ast.expr, value: ast.expr, line: int) -> None:
         if isinstance(target, ast.Name):
             self.expression(value)
-            self.emit("STORE_NAME", target.id, line)
+            self.store_name(target.id, line)
         elif isinstance(target, ast.Subscript):
             # Python evaluates the right-hand side before every target in a
             # normal assignment. Keep that ordering observable.
@@ -389,7 +533,7 @@ class FunctionCompiler:
 
     def store_target(self, target: ast.expr, line: int) -> None:
         if isinstance(target, ast.Name):
-            self.emit("STORE_NAME", target.id, line)
+            self.store_name(target.id, line)
         elif isinstance(target, (ast.Tuple, ast.List)):
             self.emit("UNPACK", len(target.elts), line)
             for item in target.elts:
@@ -402,15 +546,7 @@ class FunctionCompiler:
         if isinstance(node, ast.Constant):
             self.emit("CONST", self.constant(node.value, node), line)
         elif isinstance(node, ast.Name):
-            if (
-                node.id not in self.local_names
-                and any(node.id in scope for scope in self.enclosing_locals)
-            ):
-                self.unsupported(
-                    node,
-                    f"closure capture of {node.id!r}",
-                )
-            self.emit("LOAD_NAME", node.id, line)
+            self.load_name(node.id, line)
         elif isinstance(node, ast.List):
             for item in node.elts:
                 self.expression(item)
@@ -606,12 +742,17 @@ class ProgramCompiler:
             tree = ast.parse(self.source, filename=self.source_name)
         except SyntaxError as exc:
             raise CompileError(str(exc)) from exc
+        module_scope = build_scope(tree.body, [], None, None, False)
+        resolve_scope(module_scope)
+        self.scopes = {}
+        self._index_scopes(module_scope)
         module_names = collect_local_names(tree.body, [])
         module = FunctionCompiler(
             self,
             "__module__",
             "__module__",
             module_names,
+            scope=module_scope,
         )
         module.statements(tree.body)
         module.emit("CONST", {"kind": "none"}, line=len(self.source.splitlines()) or 1)
@@ -620,7 +761,14 @@ class ProgramCompiler:
             "id": "__module__",
             "name": "__module__",
             "params": [],
+            "posonly_count": 0,
+            "vararg": None,
+            "kwonly": [],
+            "kwarg": None,
             "default_count": 0,
+            "kw_default_names": [],
+            "cellvars": [],
+            "freevars": [],
             "local_names": sorted(module.local_names),
             "code": module.code,
         }
@@ -633,9 +781,14 @@ class ProgramCompiler:
             "functions": self.functions,
         }
 
+    def _index_scopes(self, scope: Scope) -> None:
+        for child in scope.children:
+            self.scopes[id(child.node)] = child
+            self._index_scopes(child)
+
     def compile_function(
         self, node: ast.FunctionDef, parent: FunctionCompiler
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         if node.decorator_list:
             raise CompileError(
                 f"{self.source_name}:{node.lineno}: decorators are unsupported"
@@ -666,12 +819,14 @@ class ProgramCompiler:
         enclosing_locals = parent.enclosing_locals
         if parent.function_id != "__module__":
             enclosing_locals = (*enclosing_locals, parent.local_names)
+        scope = self.scopes[id(node)]
         compiler = FunctionCompiler(
             self,
             function_id,
             node.name,
             local_names,
             enclosing_locals,
+            scope=scope,
         )
         compiler.statements(node.body)
         compiler.emit("CONST", {"kind": "none"}, node.end_lineno or node.lineno)
@@ -686,10 +841,12 @@ class ProgramCompiler:
             "kwarg": kwarg,
             "default_count": len(args.defaults),
             "kw_default_names": keyword_default_names,
+            "cellvars": sorted(compiler.cellvars),
+            "freevars": list(compiler.freevars),
             "local_names": sorted(local_names),
             "code": compiler.code,
         }
-        return function_id
+        return function_id, list(compiler.freevars)
 
 
 def compile_source(source: str, source_name: str) -> dict[str, Any]:

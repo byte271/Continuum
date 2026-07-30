@@ -40,7 +40,9 @@ target[key()] = rhs()
         self.assertEqual(vm.globals["events"], ["rhs", "key"])
         self.assertEqual(vm.globals["target"], {"answer": 7})
 
-    def test_closure_capture_is_rejected_instead_of_running_incorrectly(self):
+    def test_closure_capture_runs_with_correct_scoping(self):
+        # This construct was previously rejected so it could not run with the
+        # wrong semantics. It now runs, so the audit asserts the semantics.
         source = """
 def outer():
     captured = 41
@@ -50,8 +52,32 @@ def outer():
 
 answer = outer()
 """
-        with self.assertRaisesRegex(CompileError, "closure"):
-            compile_source(source, "closure.py")
+        vm = VirtualMachine(
+            compile_source(source, "closure.py"), ["closure.py"], "closure.py"
+        )
+        vm.run()
+        self.assertEqual(vm.globals["answer"], 42)
+
+    def test_captured_binding_is_shared_not_copied(self):
+        source = """
+def outer():
+    total = 0
+    def add(value):
+        nonlocal total
+        total = total + value
+        return total
+    add(2)
+    add(3)
+    return total
+
+answer = outer()
+"""
+        vm = VirtualMachine(
+            compile_source(source, "shared.py"), ["shared.py"], "shared.py"
+        )
+        vm.run()
+        # A copied binding would leave the enclosing frame reading 0.
+        self.assertEqual(vm.globals["answer"], 5)
 
     def test_attribute_assignment_is_rejected_until_state_is_preserved(self):
         source = """

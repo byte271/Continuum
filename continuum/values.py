@@ -11,6 +11,47 @@ class FunctionValue:
     # Keyword-only defaults, aligned with the definition's kw_default_names.
     # Held separately because they bind by name, not by position.
     kw_defaults: tuple[Any, ...] = ()
+    # Captured cells, aligned with the definition's freevars. These are the
+    # same Cell objects the enclosing frame holds, not copies.
+    closure: tuple["Cell", ...] = ()
+
+
+class Empty:
+    """Marker for a cell that has never been assigned."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return "<empty cell>"
+
+
+EMPTY = Empty()
+
+
+@dataclass(eq=False)
+class Cell:
+    """One closed-over binding, shared by every function that captures it.
+
+    Mutable and compared by identity, so the graph codec preserves sharing the
+    same way it does for a list: two functions that close over one variable
+    still share one cell after an image round trip.
+    """
+
+    value: Any = EMPTY
+
+    def get(self, name: str) -> Any:
+        if isinstance(self.value, Empty):
+            raise NameError(
+                f"free variable {name!r} referenced before assignment in "
+                "enclosing scope"
+            )
+        return self.value
+
+    def set(self, value: Any) -> None:
+        self.value = value
+
+    def is_empty(self) -> bool:
+        return isinstance(self.value, Empty)
 
 
 @dataclass(frozen=True)

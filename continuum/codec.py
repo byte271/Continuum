@@ -10,6 +10,7 @@ from typing import Any
 from .errors import ImageError, UnsupportedObjectError
 from .resources import PortableFile
 from .values import (
+    Cell,
     BoundAttrRef,
     BuiltinRef,
     FunctionValue,
@@ -109,12 +110,20 @@ class GraphEncoder:
             if node:
                 node["state"] = self._value(value.getstate())
             return ref
+        if isinstance(value, Cell):
+            ref, node = self._reference(value, "cell")
+            if node:
+                node["empty"] = value.is_empty()
+                if not value.is_empty():
+                    node["value"] = self._value(value.value)
+            return ref
         if isinstance(value, FunctionValue):
             ref, node = self._reference(value, "function")
             if node:
                 node["function_id"] = value.function_id
                 node["defaults"] = self._value(value.defaults)
                 node["kw_defaults"] = self._value(value.kw_defaults)
+                node["closure"] = self._value(value.closure)
             return ref
         if isinstance(value, BuiltinRef):
             ref, node = self._reference(value, "builtin_ref")
@@ -288,6 +297,21 @@ class GraphDecoder:
             except TypeError as exc:
                 raise ImageError("unhashable set item in heap") from exc
             return result
+        if kind == "cell":
+            # Allocated before its contents so a closure that reaches itself
+            # through its own cell rebuilds as one shared object.
+            result = Cell()
+            self.memo[node_id] = result
+            empty = node.get("empty")
+            if not isinstance(empty, bool):
+                raise ImageError("invalid cell record")
+            if not empty:
+                if "value" not in node:
+                    raise ImageError("non-empty cell record has no value")
+                result.set(self._value(node["value"], depth + 1))
+            elif "value" in node:
+                raise ImageError("empty cell record carries a value")
+            return result
         if kind == "bytearray":
             try:
                 result = bytearray(base64.b64decode(node["value"], validate=True))
@@ -353,10 +377,18 @@ class GraphDecoder:
                 kw_defaults = self._value(node["kw_defaults"], depth + 1)
                 if not isinstance(kw_defaults, tuple):
                     raise ImageError("function keyword defaults are not a tuple")
+                if "closure" not in node:
+                    raise ImageError("function record has no closure")
+                closure = self._value(node["closure"], depth + 1)
+                if not isinstance(closure, tuple) or any(
+                    not isinstance(item, Cell) for item in closure
+                ):
+                    raise ImageError("function closure is not a tuple of cells")
                 result = FunctionValue(
                     self._plain_str(node, "function_id"),
                     defaults,
                     kw_defaults,
+                    closure,
                 )
             elif kind == "builtin_ref":
                 result = BuiltinRef(self._plain_str(node, "name"))

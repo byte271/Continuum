@@ -40,8 +40,10 @@ closed builtin, method, module, object, and resource model documented here.
 | Keyword-only defaults | supported | Definition-time evaluation with identity preserved across calls and images |
 | Starred / double-star call arguments | explicitly rejected | No expansion IR |
 | Nested functions without captures | supported | Function value is stored in the enclosing local |
-| Closures / free-variable capture | explicitly rejected | Compiler detects a read from an enclosing function scope |
-| `nonlocal` / `global` | explicitly rejected | No closure cells or function writes to module bindings |
+| Closures / free-variable capture | supported | Scope analysis marks captured bindings as cells; multi-level capture works |
+| `nonlocal` | supported | Writes through the shared cell; rejected when no enclosing function binds the name |
+| `global` | explicitly rejected | Module bindings are not celled |
+| Closure identity across an image | supported | Two closures over one variable still share one cell after restore |
 | Function objects in containers | supported | Portable `function_id` reference |
 | Top-level recursive / mutually recursive functions | supported | Module binding lookup tested |
 | Decorators | explicitly rejected | Definition-time transformation is not represented |
