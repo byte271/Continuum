@@ -27,7 +27,11 @@ has no Windows job.
   The same two jobs passed for IR 0.3/runtime 0.2.0a1 in Actions run
   [30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
   at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`. This is the only
-  verified cross-platform direction.
+  verified cross-platform direction. The 0.2.0 release reran both jobs at
+  commit `a73073d` in Actions run
+  [30585208329](https://github.com/byte271/Continuum/actions/runs/30585208329),
+  and all three bundle jobs passed in run
+  [30585208377](https://github.com/byte271/Continuum/actions/runs/30585208377).
 - Native same-host continuation on Linux x86_64, Apple Silicon macOS arm64,
   and Windows x86_64. `runtime-bundles.yml` builds exact CPython 3.12.13 from
   source on each host and runs the complete suite, the installer, and

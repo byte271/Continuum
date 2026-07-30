@@ -110,9 +110,12 @@ The same two-job workflow was rerun for IR 0.3 at runtime `0.2.0a1`: its
 in [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641).
 
 A runtime version is part of the image compatibility contract, so the `0.2.0`
-release re-runs that proof rather than inheriting it. The workflow runs on
-every push to `main`; the badge at the top of this file reports the current
-state of that one direction.
+release reran that proof rather than inheriting it. Both jobs passed again at
+the release commit `a73073d` in
+[Actions run 30585208329](https://github.com/byte271/Continuum/actions/runs/30585208329),
+with a freshly generated `0.2.0` image. The workflow runs on every push to
+`main`; the badge at the top of this file reports the current state of that
+one direction.
 
 ## Which CI job proves what
 

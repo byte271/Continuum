@@ -61,7 +61,7 @@ implementation and can still have platform-specific behavior.
 | Current IR 0.3/runtime 0.2.0 | Current Apple Silicon macOS arm64 process | New process on same macOS arm64 host | verified; `runtime-bundles.yml` `macos-arm64` |
 | Current IR 0.3/runtime 0.2.0 | Current Windows x86_64 process | New process on same Windows x86_64 host | verified; `runtime-bundles.yml` `windows-x86_64` |
 | IR 0.3/runtime 0.2.0a1 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30509186641 at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa` |
-| Release IR 0.3/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | pending; the 0.2.0 release commit reruns the same two jobs on `main` |
+| Release IR 0.3/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30585208329 at commit `a73073d` |
 | Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
 | Any revision | Native Windows x86_64 | Any other platform | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Any other platform | Native Windows x86_64 | unverified; no workflow generates or resumes a cross-host Windows image |
