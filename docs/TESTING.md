@@ -23,6 +23,8 @@
 | Runtime incompatibility | Incompatible metadata test |
 | Unsupported objects | Checkpoint rejection and retry tests |
 | Final result equals uninterrupted run | Demo and adversarial final-hash tests |
+| Demonstration cannot lose a freeze race on a fast host | `test_repeated_demos_never_lose_the_freeze_race`, `test_held_source_cannot_complete_before_release` |
+| Demo synchronization stays out of `continuum run` | `test_start_gate_is_not_installed_outside_the_demo` |
 | Linux x86_64 to macOS arm64, IR 0.2 | Actions run 30489463484; 26/26 proof conditions passed |
 | Linux x86_64 to macOS arm64, IR 0.3 | Actions run 30509186641 at commit `3a4a43f`; both jobs passed |
 | Native same-host continuation, three hosts | `runtime-bundles.yml` jobs `linux-x86_64`, `macos-arm64`, `windows-x86_64`, each running this complete suite |
@@ -55,7 +57,7 @@ $env:PYTHONPATH = "."; python benchmarks\measure.py `
   --iterations 10000 --repetitions 5
 ```
 
-The suite discovers 90 tests on every host. Skips are explicit and
+The suite discovers 95 tests on every host. Skips are explicit and
 mechanism-bound rather than platform exclusions:
 
 | Host | Skipped |

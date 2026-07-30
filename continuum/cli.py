@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 from . import IR_VERSION, SUPPORTED_PYTHON, __version__
 from .compiler import compile_source
@@ -48,8 +49,120 @@ VERIFIED_SAME_HOST_TARGETS = (
 VERIFIED_CROSS_PLATFORM_PATHS = ("Linux x86_64 -> macOS arm64",)
 
 
+# Demonstration harness synchronization. These names are set by `continuum
+# demo` on the source process it launches and are honored nowhere else. They
+# hold the source at a chosen safe point so the demonstration never depends on
+# the freeze client winning a race against a fast host. The freeze protocol
+# itself is untouched: the held process still observes a genuinely published
+# request through the ordinary session mechanism.
+DEMO_SYNC_ENV = "CONTINUUM_DEMO_SYNC"
+DEMO_HOLD_SAFE_POINT_ENV = "CONTINUUM_DEMO_HOLD_SAFE_POINT"
+# Measured against examples/demo.py: its 5,000-entry build loop ends at safe
+# point 15,025, which is also where the first progress line is written, and a
+# minimum 1,000-iteration workload ends near safe point 22,375. Holding at
+# 16,000 is therefore always after real progress and always before the end of
+# the shortest workload the demonstration accepts.
+DEMO_HOLD_SAFE_POINT = 16_000
+DEMO_READY_TIMEOUT_SECONDS = 120.0
+DEMO_START_TIMEOUT_SECONDS = 120.0
+DEMO_REQUEST_TIMEOUT_SECONDS = 30.0
+DEMO_POLL_INTERVAL_SECONDS = 0.005
+
+
 def _platform_label(system: str, architecture: str) -> str:
     return f"{_DISPLAY_OS.get(system, system)} {architecture}"
+
+
+class _DemoStartGate:
+    """Hold a demonstration source process at one safe point.
+
+    The gate publishes a readiness document once the VM reaches
+    `hold_safe_point`, then blocks that safe point until the demonstration
+    controller creates the start file. The controller only creates it after it
+    has seen the real freeze request appear on disk, so the source cannot run
+    to completion before the request exists. Every safe point, including the
+    held one, still runs the unmodified session callback.
+    """
+
+    def __init__(
+        self,
+        sync_dir: Path,
+        hold_safe_point: int,
+        controller: SessionController,
+    ) -> None:
+        self.sync_dir = sync_dir
+        self.hold_safe_point = hold_safe_point
+        self.controller = controller
+        self.ready_path = sync_dir / "ready.json"
+        self.start_path = sync_dir / "start"
+        self.released = False
+
+    def __call__(self, vm: VirtualMachine) -> None:
+        if not self.released and vm.safe_points_executed >= self.hold_safe_point:
+            self._signal_ready(vm)
+            self._await_start()
+            self.released = True
+        self.controller.on_safe_point(vm)
+
+    def _signal_ready(self, vm: VirtualMachine) -> None:
+        payload = {
+            "session_id": self.controller.session_id,
+            "pid": os.getpid(),
+            "request_path": str(self.controller.request_path),
+            "safe_points_executed": vm.safe_points_executed,
+        }
+        temporary = self.ready_path.with_name(
+            f".{self.ready_path.name}.{uuid.uuid4().hex}.tmp"
+        )
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                json.dump(payload, handle, sort_keys=True)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.ready_path)
+        except OSError as exc:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+            raise ContinuumError(
+                f"cannot publish demo readiness to {self.ready_path}: {exc}"
+            ) from exc
+
+    def _await_start(self) -> None:
+        deadline = time.monotonic() + DEMO_START_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if self.start_path.exists():
+                return
+            time.sleep(DEMO_POLL_INTERVAL_SECONDS)
+        raise ContinuumError(
+            "demo start gate was not released within "
+            f"{DEMO_START_TIMEOUT_SECONDS:.0f}s; expected the controller to "
+            f"create {self.start_path}"
+        )
+
+
+def _demo_safe_point_callback(controller: SessionController):
+    sync = os.environ.get(DEMO_SYNC_ENV)
+    if not sync:
+        return controller.on_safe_point
+    sync_dir = Path(sync)
+    if not sync_dir.is_dir():
+        raise ContinuumError(
+            f"{DEMO_SYNC_ENV} is not an existing directory: {sync_dir}"
+        )
+    raw = os.environ.get(DEMO_HOLD_SAFE_POINT_ENV, "")
+    try:
+        hold_safe_point = int(raw)
+    except ValueError as exc:
+        raise ContinuumError(
+            f"{DEMO_HOLD_SAFE_POINT_ENV} must be an integer, got {raw!r}"
+        ) from exc
+    if hold_safe_point < 1:
+        raise ContinuumError(
+            f"{DEMO_HOLD_SAFE_POINT_ENV} must be at least 1, got {hold_safe_point}"
+        )
+    return _DemoStartGate(sync_dir, hold_safe_point, controller)
 
 
 def _format_compatible_targets() -> tuple[str, ...]:
@@ -172,13 +285,14 @@ def _run(args: argparse.Namespace) -> int:
         raise ContinuumError(f"cannot read {path}: {exc}") from exc
     ir = compile_source(source, str(path))
     controller = SessionController(source, str(path))
+    safe_point_callback = _demo_safe_point_callback(controller)
     controller.start()
     vm = VirtualMachine(
         ir,
         [str(path), *args.arguments],
         str(path),
         resource_policy=args.file_policy,
-        safe_point_callback=controller.on_safe_point,
+        safe_point_callback=safe_point_callback,
     )
     print(f"Continuum session: {controller.session_id}", file=sys.stderr, flush=True)
     try:
@@ -393,6 +507,18 @@ def _demo(args: argparse.Namespace) -> int:
         if not inherited_pythonpath
         else os.pathsep.join((runtime_root, inherited_pythonpath))
     )
+    # Only the source process is synchronized. The resumed target and the
+    # uninterrupted control must run exactly as an ordinary user would run
+    # them, so they never receive these names.
+    sync_dir = output_dir / "sync"
+    sync_dir.mkdir()
+    start_path = sync_dir / "start"
+    ready_path = sync_dir / "ready.json"
+    source_environment = {
+        **environment,
+        DEMO_SYNC_ENV: str(sync_dir),
+        DEMO_HOLD_SAFE_POINT_ENV: str(DEMO_HOLD_SAFE_POINT),
+    }
 
     print("Same-machine continuation demonstration")
     print(f"Evidence directory: {output_dir}")
@@ -414,40 +540,74 @@ def _demo(args: argparse.Namespace) -> int:
                 str(args.iterations),
             ],
             cwd=output_dir,
-            env=environment,
+            env=source_environment,
             stdout=stdout_handle,
             stderr=stderr_handle,
             text=True,
         )
-        session_id = _wait_for_demo_session(source, source_stderr, source_stdout)
-        print("Continuum session started")
-        print(f"Session: {session_id}")
-        print(f"Source PID: {source.pid}")
-        print("Freeze command:")
-        print(f"  continuum freeze {session_id} -o {image}")
+        freeze_process = None
+        try:
+            ready = _wait_for_demo_ready(
+                source, ready_path, source_stderr, source_stdout
+            )
+            session_id = ready["session_id"]
+            print("Continuum session started")
+            print(f"Session: {session_id}")
+            print(f"Source PID: {source.pid}")
+            print(
+                "Source held at safe point "
+                f"{ready['safe_points_executed']} awaiting a published "
+                "freeze request"
+            )
+            print("Freeze command:")
+            print(f"  continuum freeze {session_id} -o {image}")
 
-        freeze = subprocess.run(
-            [*command, "freeze", session_id, "-o", str(image)],
-            cwd=output_dir,
-            env=environment,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if freeze.returncode != 0:
-            if source.poll() is None:
-                source.kill()
-                source.wait()
-            raise ContinuumError(
-                "demo freeze failed: "
-                + (freeze.stderr.strip() or freeze.stdout.strip())
+            # The real freeze client, started before the source is released so
+            # that no host can finish the workload first.
+            freeze_process = subprocess.Popen(
+                [*command, "freeze", session_id, "-o", str(image)],
+                cwd=output_dir,
+                env=environment,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
-        source_returncode = source.wait(timeout=15)
-        if source_returncode != 0:
-            raise ContinuumError(
-                f"demo source exited with status {source_returncode}"
+            request_published = _wait_for_freeze_request(
+                freeze_process, source, Path(ready["request_path"])
             )
-        source_exited_before_target = source.poll() is not None
+            source_alive_at_publication = source.poll() is None
+            if not source_alive_at_publication:
+                raise ContinuumError(
+                    "demo source exited while held at its safe point; the "
+                    "start gate did not hold the workload"
+                )
+            print("Freeze request published; releasing the held safe point")
+            _release_demo_start(start_path)
+
+            try:
+                freeze_stdout, freeze_stderr = freeze_process.communicate(
+                    timeout=DEMO_START_TIMEOUT_SECONDS
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise ContinuumError(
+                    "demo freeze did not complete within "
+                    f"{DEMO_START_TIMEOUT_SECONDS:.0f}s after the source was "
+                    "released"
+                ) from exc
+            if freeze_process.returncode != 0:
+                raise ContinuumError(
+                    "demo freeze failed: "
+                    + (freeze_stderr.strip() or freeze_stdout.strip())
+                )
+            source_returncode = source.wait(timeout=15)
+            if source_returncode != 0:
+                raise ContinuumError(
+                    f"demo source exited with status {source_returncode}"
+                )
+            source_exited_before_target = source.poll() is not None
+        finally:
+            _terminate_demo_process(freeze_process)
+            _terminate_demo_process(source)
 
     input_path.unlink()
     inspect_result = subprocess.run(
@@ -533,6 +693,11 @@ def _demo(args: argparse.Namespace) -> int:
     target_progress = _demo_progress(after)
     identity_count, final_count = _demo_marker_counts(combined)
     comparison = {
+        "hold_safe_point": DEMO_HOLD_SAFE_POINT,
+        "source_safe_points_at_hold": ready["safe_points_executed"],
+        "freeze_request_published_before_release": request_published,
+        "source_alive_when_request_published": source_alive_at_publication,
+        "source_made_progress_before_freeze": bool(source_progress),
         "source_pid": source.pid,
         "source_returncode": source_returncode,
         "target_pid": target_pid,
@@ -556,6 +721,12 @@ def _demo(args: argparse.Namespace) -> int:
         json.dumps(comparison, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
+    if not source_progress:
+        raise ContinuumError(
+            f"demo source froze at safe point {DEMO_HOLD_SAFE_POINT} without "
+            "producing progress output; re-measure DEMO_HOLD_SAFE_POINT "
+            f"against the demonstration workload, see {comparison_path}"
+        )
     if not all(
         comparison[key]
         for key in (
@@ -566,12 +737,19 @@ def _demo(args: argparse.Namespace) -> int:
             "final_hash_matches",
             "identity_proof_once",
             "final_output_once",
+            "freeze_request_published_before_release",
+            "source_alive_when_request_published",
+            "source_made_progress_before_freeze",
         )
     ):
         raise ContinuumError(f"demo comparison failed; see {comparison_path}")
 
     print("Continuation restored")
     print(f"Target PID: {target_pid}")
+    print(
+        "Freeze request published while the source was held: "
+        + ("yes" if comparison["source_alive_when_request_published"] else "no")
+    )
     print(f"Last source progress: {comparison['source_progress_last']}")
     print(f"First resumed progress: {comparison['target_progress_first']}")
     print("Combined output matches uninterrupted control: yes")
@@ -594,26 +772,143 @@ def _examples_directory() -> Path:
     return candidate
 
 
-def _wait_for_demo_session(
+def _demo_output_tail(path: Path, limit: int = 500) -> str:
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return text[-limit:]
+
+
+def _wait_for_demo_ready(
     process: subprocess.Popen[str],
+    ready_path: Path,
     stderr_path: Path,
     stdout_path: Path,
-) -> str:
-    deadline = time.monotonic() + 20
-    session_id = None
+) -> dict[str, Any]:
+    """Wait until the source is held at its safe point and has said so.
+
+    Returns the readiness document the held source published. Waiting on that
+    document rather than on observed output is what makes the demonstration
+    independent of how fast the host runs the workload.
+    """
+
+    deadline = time.monotonic() + DEMO_READY_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        stderr = stderr_path.read_text(encoding="utf-8")
-        if match := re.search(r"^Continuum session: (cont-[0-9a-f]+)$", stderr, re.M):
-            session_id = match.group(1)
-        stdout = stdout_path.read_text(encoding="utf-8")
-        if session_id and "Processing " in stdout:
-            return session_id
+        if ready_path.exists():
+            return _validate_demo_ready(ready_path, stderr_path)
         if process.poll() is not None:
             raise ContinuumError(
-                "demo source exited before a checkpoint request could be made"
+                "demo source exited before reaching its held safe point "
+                f"(status {process.returncode}): "
+                + (
+                    _demo_output_tail(stderr_path)
+                    or _demo_output_tail(stdout_path)
+                    or "no output"
+                )
             )
-        time.sleep(0.01)
-    raise ContinuumError("timed out waiting for the demo safe point")
+        time.sleep(DEMO_POLL_INTERVAL_SECONDS)
+    raise ContinuumError(
+        "timed out after "
+        f"{DEMO_READY_TIMEOUT_SECONDS:.0f}s waiting for the demo source to "
+        f"reach safe point {DEMO_HOLD_SAFE_POINT} and publish {ready_path}"
+    )
+
+
+def _validate_demo_ready(ready_path: Path, stderr_path: Path) -> dict[str, Any]:
+    try:
+        ready = json.loads(ready_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContinuumError(
+            f"cannot read demo readiness document {ready_path}: {exc}"
+        ) from exc
+    session_id = ready.get("session_id")
+    request_path = ready.get("request_path")
+    safe_points = ready.get("safe_points_executed")
+    if not isinstance(session_id, str) or not re.fullmatch(
+        r"cont-[0-9a-f]+", session_id
+    ):
+        raise ContinuumError(
+            f"demo readiness document has no valid session: {session_id!r}"
+        )
+    if not isinstance(request_path, str) or not request_path:
+        raise ContinuumError("demo readiness document has no freeze request path")
+    if not isinstance(safe_points, int) or safe_points < 1:
+        raise ContinuumError("demo readiness document has no safe-point count")
+
+    # The documented interface is the session identifier on stderr. Check the
+    # held source agrees with it instead of trusting one channel.
+    stderr = ""
+    try:
+        stderr = stderr_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ContinuumError(f"cannot read demo source stderr: {exc}") from exc
+    match = re.search(r"^Continuum session: (cont-[0-9a-f]+)$", stderr, re.M)
+    if match is None:
+        raise ContinuumError(
+            "demo source published readiness without announcing a session on "
+            "stderr"
+        )
+    if match.group(1) != session_id:
+        raise ContinuumError(
+            "demo session identity disagreement: stderr reported "
+            f"{match.group(1)}, readiness document reported {session_id}"
+        )
+    return ready
+
+
+def _wait_for_freeze_request(
+    freeze_process: subprocess.Popen[str],
+    source: subprocess.Popen[str],
+    request_path: Path,
+) -> bool:
+    """Wait until the real freeze client has published its request document."""
+
+    deadline = time.monotonic() + DEMO_REQUEST_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if request_path.exists():
+            return True
+        if freeze_process.poll() is not None:
+            stdout, stderr = freeze_process.communicate()
+            raise ContinuumError(
+                "demo freeze client exited before publishing a request: "
+                + (stderr.strip() or stdout.strip() or "no output")
+            )
+        if source.poll() is not None:
+            raise ContinuumError(
+                "demo source exited before the freeze request was published"
+            )
+        time.sleep(DEMO_POLL_INTERVAL_SECONDS)
+    raise ContinuumError(
+        f"freeze request {request_path} was not published within "
+        f"{DEMO_REQUEST_TIMEOUT_SECONDS:.0f}s"
+    )
+
+
+def _release_demo_start(start_path: Path) -> None:
+    try:
+        descriptor = os.open(
+            start_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600
+        )
+    except FileExistsError as exc:
+        raise ContinuumError(
+            f"demo start gate {start_path} was already released"
+        ) from exc
+    except OSError as exc:
+        raise ContinuumError(
+            f"cannot release demo start gate {start_path}: {exc}"
+        ) from exc
+    os.close(descriptor)
+
+
+def _terminate_demo_process(process: subprocess.Popen[str] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.kill()
+    try:
+        process.communicate(timeout=10)
+    except (subprocess.TimeoutExpired, ValueError):
+        pass
 
 
 def _demo_progress(content: bytes) -> list[str]:

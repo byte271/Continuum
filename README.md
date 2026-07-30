@@ -137,6 +137,14 @@ live continuation, deletes the original bundled input, resumes in a new
 process, runs an uninterrupted control, and retains its comparison evidence.
 It is explicitly a same-machine demonstration.
 
+The demonstration is deterministic on any host speed. Its source process is
+held at one safe point, mid-workload, until the real `continuum freeze`
+command has published its request, and is only then released to observe that
+request. The freeze protocol itself is unchanged: this synchronization is
+confined to the `demo` harness and never affects `continuum run`. The retained
+`comparison.json` records the hold point and that the request existed while
+the source was still alive.
+
 To operate the CLI manually:
 
 ```bash
@@ -191,7 +199,7 @@ source host recorded it; `NEW` is resolved on the current host.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 90 tests and is run natively on Linux x86_64, Apple
+The suite discovers 95 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple
