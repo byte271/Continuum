@@ -80,7 +80,7 @@ in a new native process on a GitHub-hosted Apple Silicon macOS arm64 runner.
 All 26 proof conditions and the final evidence manifest passed.
 
 That run proves IR 0.2/runtime 0.1.1.dev0. The same workflow has since passed
-for current IR 0.3/runtime 0.2.0a1 in
+for IR 0.3/runtime 0.2.0a1 in
 [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
 at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`, with a freshly generated
 IR 0.3 image. It runs on every push to `main`.

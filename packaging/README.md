@@ -3,11 +3,11 @@
 Continuum requires exact CPython 3.12.13. The supported installation design is
 a platform archive containing its own interpreter:
 
-```text
-continuum-linux-x86_64/
-continuum-macos-arm64/
-continuum-windows-x86_64/
-```
+| Platform | Bundle | Builder | Installer | Command |
+| --- | --- | --- | --- | --- |
+| Linux x86_64 | `continuum-linux-x86_64.tar.gz` | `build_bundle.sh` | `install.sh` | `bin/continuum` |
+| macOS arm64 | `continuum-macos-arm64.tar.gz` | `build_bundle.sh` | `install.sh` | `bin/continuum` |
+| Windows x86_64 | `continuum-windows-x86_64.zip` | `build_bundle_windows.ps1` | `install.ps1` | `bin\continuum.cmd` |
 
 Each bundle contains the Continuum CLI, the exact CPython runtime, a runtime
 identity manifest including the Continuum and IR versions, CPython build

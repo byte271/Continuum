@@ -69,7 +69,7 @@ Images intentionally contain JSON, source, bundled data, and ZIP metadata—no
 native code or pointers. Native Linux x86_64 to Apple Silicon macOS arm64
 continuation was verified for the controlled proof workload in
 [Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
-for IR 0.2, and again for current IR 0.3/runtime 0.2.0a1 in
+for IR 0.2, and again for IR 0.3/runtime 0.2.0a1 in
 [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641).
 That single platform pair and workload do not establish portability for other
 programs, resources, operating systems, architectures, or Python versions.

@@ -2,26 +2,81 @@
 
 [![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml)
 [![Runtime bundles](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](STATUS.md)
+[![Python](https://img.shields.io/badge/CPython-3.12.13-3776ab.svg)](#requirements)
+[![Platforms](https://img.shields.io/badge/native-Linux%20%7C%20macOS%20%7C%20Windows-success.svg)](#platform-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Continuum pauses a supported Python program on Linux x86_64 and resumes the
-same live execution state in a new process on Apple Silicon macOS arm64.
+**Freeze a running Python program. Resume the same live execution state in a
+new process.**
 
-Continuum runs natively on Linux x86_64, Apple Silicon macOS arm64, and
-Windows x86_64. Continuation between two different platforms is verified for
-exactly one direction: Linux x86_64 to Apple Silicon macOS arm64.
+Four active frames, their locals, logical program counters, a partially
+evaluated operand stack, `try/finally` control state, shared references, a
+reference cycle, RNG state, and an open file at a nonzero offset all survive
+the move. Nothing replays. Nothing restarts. The program contains no
+checkpoint calls at all.
 
-Continuum currently compiles a controlled pure-Python subset into a portable
+It has already done this **between machines**: a program paused on native
+Linux x86_64 resumed on a native Apple Silicon macOS arm64 runner, in a new
+process, after the source process had exited — and produced output matching an
+uninterrupted control run byte for byte.
+
+Continuum compiles a controlled pure-Python subset into a portable
 explicit-stack runtime. It does not migrate arbitrary CPython processes or
 native machine state.
 
-```console
-$ python3 -m continuum doctor
-$ python3 -m continuum demo --output-dir /tmp/continuum-demo
-Same-machine continuation demonstration
-...
-Combined output matches uninterrupted control: yes
+## Quickstart
+
+```bash
+python3 -m continuum doctor
+python3 -m continuum demo --output-dir /tmp/continuum-demo
 ```
+
+```powershell
+python -m continuum doctor
+python -m continuum demo --output-dir $env:TEMP\continuum-demo
+```
+
+```console
+Same-machine continuation demonstration
+Source held at safe point 16000 awaiting a published freeze request
+Freeze request published; releasing the held safe point
+Checkpoint committed
+Source process exited
+Original bundled input deleted
+Continuation restored
+Last source progress: Processing 2.0%
+First resumed progress: Processing 4.0%
+Combined output matches uninterrupted control: yes
+Final result hash matches control: yes
+```
+
+## Platform support
+
+Continuum runs natively on three platforms. Every push builds exact CPython
+3.12.13 **from source** on each one and runs the complete 95-test suite, the
+transactional installer, and `continuum doctor` against the moved bundle.
+
+| Platform | Runs natively | Same-host continuation | Image moves to another platform |
+| --- | :---: | :---: | --- |
+| Linux x86_64 | ✅ | ✅ CI-verified | ✅ verified → macOS arm64 |
+| Apple Silicon macOS arm64 | ✅ | ✅ CI-verified | ✅ verified ← Linux x86_64 |
+| Windows x86_64 | ✅ | ✅ CI-verified | ⚪ never run |
+| Windows arm64 | ❌ | ❌ | ❌ rejected by the image format |
+
+**Same-host continuation** means checkpoint, source-process exit, and resume in
+a new process on the same machine. The Windows job additionally runs a complete
+`continuum demo` continuation against its moved bundle.
+
+**Cross-platform continuation** is a separate, stronger claim, and it holds for
+exactly one direction: native Linux x86_64 to native Apple Silicon macOS arm64.
+No cross-platform path involving Windows has been run in either direction, so
+none is claimed. Running natively on a platform is not evidence that an image
+moves to or from it — see [PORTABILITY.md](PORTABILITY.md) for the tested pairs
+and [ROADMAP.md](ROADMAP.md) for the Windows proof leg that would change this.
+
+The published 50-program compatibility corpus report is a Linux x86_64
+measurement and has not been regenerated on Windows or macOS.
 
 ## Verified cross-platform proof
 
@@ -49,38 +104,25 @@ sockets, writable files, and arbitrary CPython frames are unsupported.
 
 That proof is immutable evidence for Continuum IR 0.2 at the commit above.
 
-The same two-job workflow has since been rerun for current IR 0.3 and runtime
-0.2.0a1. Its `linux-source` and dependent `macos-target` jobs passed at commit
+The same two-job workflow was rerun for IR 0.3 at runtime `0.2.0a1`: its
+`linux-source` and dependent `macos-target` jobs passed at commit
 [`3a4a43fb74331113225d7b9a3a0fef4afd1371fa`](https://github.com/byte271/Continuum/commit/3a4a43fb74331113225d7b9a3a0fef4afd1371fa)
 in [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641).
-The workflow runs on every push to `main`, so the badge above reports the
-current state of that one direction.
 
-Cross-platform evidence covers native Linux x86_64 to native Apple Silicon
-macOS arm64 and nothing else. No cross-platform path involving Windows has
-been run in either direction.
+A runtime version is part of the image compatibility contract, so the `0.2.0`
+release re-runs that proof rather than inheriting it. The workflow runs on
+every push to `main`; the badge at the top of this file reports the current
+state of that one direction.
 
-## Native platform support
+## Which CI job proves what
 
-[`runtime-bundles.yml`](.github/workflows/runtime-bundles.yml) builds exact
-CPython 3.12.13 from source on each host, then runs the complete test suite,
-the transactional installer, and `continuum doctor` against the moved bundle:
-
-| Host | Runner | Same-host continuation |
+| Workflow | Jobs | What it establishes |
 | --- | --- | --- |
-| Linux x86_64 | `ubuntu-24.04` | CI-verified |
-| Apple Silicon macOS arm64 | `macos-26` | CI-verified |
-| Windows x86_64 | `windows-2025` | CI-verified |
+| [`runtime-bundles.yml`](.github/workflows/runtime-bundles.yml) | `linux-x86_64` (`ubuntu-24.04`), `macos-arm64` (`macos-26`), `windows-x86_64` (`windows-2025`) | Native build from CPython source, complete suite, installer, and `doctor` on each platform — same-host continuation only |
+| [`cross-platform-proof.yml`](.github/workflows/cross-platform-proof.yml) | `linux-source` → `macos-target` | One image written on Linux x86_64 and resumed on macOS arm64, with independent evidence verification |
 
-Same-host continuation means checkpoint, source-process exit, and resume in a
-new process on the same machine. The Windows job additionally runs the
-`continuum demo` continuation end to end against its moved bundle.
-
-Windows arm64 is unsupported; images reject it. The published 50-program
-compatibility corpus report is a Linux x86_64 measurement and has not been
-regenerated on Windows or macOS. Native support on a host is not evidence that
-an image moves between hosts; see [PORTABILITY.md](PORTABILITY.md) for the
-tested pairs.
+There is no third job pairing Windows with another platform, which is exactly
+why no such claim appears anywhere in this repository.
 
 ## Why this is a real continuation
 

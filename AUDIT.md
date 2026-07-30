@@ -8,7 +8,8 @@ The historical untouched-baseline note below describes the original imported
 workspace, not the current repository identity.
 
 That immutable proof used IR 0.2/runtime 0.1.1.dev0. Current development uses
-IR 0.3/runtime 0.2.0a1 after adding positional default arguments. Its
+IR 0.3/runtime 0.2.0 after adding positional default arguments. The proof
+below was produced at runtime 0.2.0a1. Its
 same-machine audit passes, and a freshly written IR 0.3 image completed the
 same two-job Linux-to-macOS proof in
 [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)

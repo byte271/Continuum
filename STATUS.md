@@ -1,6 +1,20 @@
 # Status
 
+Version: 0.2.0 · IR 0.3 · image format 0.1 · CPython 3.12.13 exactly
 Updated: 2026-07-30
+
+## Platform matrix
+
+| Platform | Native runtime | Same-host continuation | Cross-platform continuation |
+| --- | :---: | :---: | --- |
+| Linux x86_64 | ✅ | ✅ | ✅ to macOS arm64 |
+| Apple Silicon macOS arm64 | ✅ | ✅ | ✅ from Linux x86_64 |
+| Windows x86_64 | ✅ | ✅ | ⚪ never run, in either direction |
+| Windows arm64 | ❌ | ❌ | ❌ not an accepted image target |
+
+Native and same-host columns are established by `runtime-bundles.yml`; the
+cross-platform column is established only by `cross-platform-proof.yml`, which
+has no Windows job.
 
 ## WORKING
 
@@ -10,7 +24,7 @@ Updated: 2026-07-30
   [30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
   passed 26/26 proof conditions at commit
   `15bceefece050d06a1f504244a77434e31fd5228` for IR 0.2/runtime 0.1.1.dev0.
-  The same two jobs passed for current IR 0.3/runtime 0.2.0a1 in Actions run
+  The same two jobs passed for IR 0.3/runtime 0.2.0a1 in Actions run
   [30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
   at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`. This is the only
   verified cross-platform direction.
