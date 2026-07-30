@@ -380,6 +380,8 @@ class FunctionCompiler:
             )
             self.store_name(node.name, line)
             self.safe(node)
+        elif isinstance(node, ast.ClassDef):
+            self.compile_class(node, line)
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if "." in alias.name and alias.asname is None:
@@ -524,10 +526,10 @@ class FunctionCompiler:
             self.expression(target.slice)
             self.emit("STORE_SUBSCR_VALUE_FIRST", line=line)
         elif isinstance(target, ast.Attribute):
-            self.unsupported(
-                target,
-                "attribute assignment is not yet state-preserving",
-            )
+            # Python evaluates the right-hand side first here too.
+            self.expression(value)
+            self.expression(target.value)
+            self.emit("STORE_ATTR_VALUE_FIRST", target.attr, line)
         else:
             self.unsupported(target, "assignment target")
 
@@ -640,6 +642,75 @@ class FunctionCompiler:
             self.emit("BUILD_STRING", len(node.values), line)
         else:
             self.unsupported(node, "expression")
+
+    def compile_class(self, node: ast.ClassDef, line: int) -> None:
+        """Build a VM-owned class from a restricted body.
+
+        Only method definitions and simple `name = expression` members are
+        accepted. Anything else, including a base class or a metaclass, is
+        rejected rather than silently reinterpreted.
+        """
+
+        if node.bases or node.keywords:
+            self.unsupported(node, "base classes and metaclasses")
+        if node.decorator_list:
+            self.unsupported(node, "class decorators")
+
+        members: list[str] = []
+        for statement in node.body:
+            if isinstance(statement, ast.FunctionDef):
+                function_id, captured = self.owner.compile_function(
+                    statement, self
+                )
+                for default in statement.args.defaults:
+                    self.expression(default)
+                keyword_defaults = [
+                    default
+                    for default in statement.args.kw_defaults
+                    if default is not None
+                ]
+                for default in keyword_defaults:
+                    self.expression(default)
+                for name in captured:
+                    self.emit("LOAD_CLOSURE", name, statement.lineno)
+                self.emit(
+                    "MAKE_FUNCTION",
+                    {
+                        "function_id": function_id,
+                        "default_count": len(statement.args.defaults),
+                        "kw_default_count": len(keyword_defaults),
+                        "closure_count": len(captured),
+                    },
+                    statement.lineno,
+                )
+                members.append(statement.name)
+            elif isinstance(statement, ast.Assign) and len(
+                statement.targets
+            ) == 1 and isinstance(statement.targets[0], ast.Name):
+                self.expression(statement.value)
+                members.append(statement.targets[0].id)
+            elif isinstance(statement, ast.Pass):
+                continue
+            elif isinstance(statement, ast.Expr) and isinstance(
+                statement.value, ast.Constant
+            ):
+                continue  # docstring
+            else:
+                self.unsupported(statement, "class body statement")
+
+        if len(set(members)) != len(members):
+            self.unsupported(node, "duplicate class member")
+        self.emit(
+            "MAKE_CLASS",
+            {
+                "class_id": f"{self.name}.{node.name}@{node.lineno}",
+                "name": node.name,
+                "members": members,
+            },
+            line,
+        )
+        self.store_name(node.name, line)
+        self.safe(node)
 
     def compile_unpacking_call(self, node: ast.Call, line: int) -> None:
         """Compile a call containing `*args` or `**kwargs`.

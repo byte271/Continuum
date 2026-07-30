@@ -79,9 +79,12 @@ fall back to a same-named module global.
 | Shared mutable references | supported | Identity after restoration tested |
 | Cyclic mutable graphs | supported | List/dictionary cycles tested |
 | Cycles requiring an immutable/wrapper object first | explicitly rejected | Checkpoint preflight rejects before commit |
-| User-defined classes and instances | explicitly rejected | No class layout or method model |
-| Instance/class attributes | explicitly rejected | Attribute assignment is rejected; reads are restricted to portable bound methods/module attributes |
-| Inheritance / class variables / self-referential instances | explicitly rejected | Classes are rejected |
+| User-defined classes and instances | supported | VM-owned; no host type object or host instance is created |
+| Instance/class attributes | supported | Instance dictionary then class namespace; assignment only onto a VM-owned instance |
+| Class variables / self-referential instances | supported | One shared class object and instance cycles survive an image |
+| Methods, `__init__`, bound methods | supported | A bound method is itself a portable value, so it may be live at a checkpoint |
+| Inheritance, base classes, metaclasses, class decorators | explicitly rejected | No descriptor protocol or MRO in this revision |
+| Class body other than methods and simple members | explicitly rejected | Body is not executed as a general scope |
 | Arbitrary native-extension values | explicitly rejected at checkpoint | No type import or pickle fallback |
 
 ## Iteration and expressions

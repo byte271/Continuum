@@ -79,7 +79,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 132 tests discovered. Tests skip only where the host
+- Current full suite: 145 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.
@@ -97,7 +97,12 @@ has no Windows job.
   Milestone 3, identity-preserving lexical closures, is complete: real
   shared cells, `nonlocal`, and multi-level capture, with two closures over
   one variable still sharing one binding after an image round trip.
-  Milestone 4 (VM-owned classes) is not started.
+  Milestone 4, VM-owned basic classes and instances, is complete: classes,
+  methods, `__init__`, class and instance attributes, and attribute
+  assignment, with no host type object or host instance created anywhere.
+  Inheritance, descriptors, metaclasses, and user-defined exception classes
+  remain out of this revision. The single combined Linux x86_64 to macOS
+  arm64 proof for IR 0.4 has not been run yet.
 - IR 0.4 images are not interchangeable with IR 0.3 images: the runtime
   negotiates an exact `continuum-ir-<version>` capability, so v0.2.0 images
   are rejected by this revision and vice versa.

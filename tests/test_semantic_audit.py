@@ -79,14 +79,43 @@ answer = outer()
         # A copied binding would leave the enclosing frame reading 0.
         self.assertEqual(vm.globals["answer"], 5)
 
-    def test_attribute_assignment_is_rejected_until_state_is_preserved(self):
+    def test_attribute_assignment_on_a_host_object_is_still_refused(self):
+        # Attribute assignment now compiles, but only a VM-owned instance can
+        # hold the result. Writing onto a host object would create state the
+        # image cannot represent, so it fails at the write.
         source = """
 import random
 rng = random.Random(1)
 rng.extra_state = 9
 """
-        with self.assertRaisesRegex(CompileError, "attribute assignment"):
-            compile_source(source, "attribute.py")
+        vm = VirtualMachine(
+            compile_source(source, "attribute.py"),
+            ["attribute.py"],
+            "attribute.py",
+        )
+        with self.assertRaises(ExecutionError) as caught:
+            vm.run()
+        self.assertIn("cannot set attribute", str(caught.exception))
+
+    def test_instance_attribute_assignment_is_preserved(self):
+        source = """
+class Holder:
+    def __init__(self):
+        self.value = 0
+
+holder = Holder()
+holder.value = 7
+holder.extra = [1, 2]
+"""
+        vm = VirtualMachine(
+            compile_source(source, "instance.py"),
+            ["instance.py"],
+            "instance.py",
+        )
+        vm.run()
+        holder = vm.globals["holder"]
+        self.assertEqual(holder.attributes["value"], 7)
+        self.assertEqual(holder.attributes["extra"], [1, 2])
 
     def test_checkpoint_rejects_unresumable_wrapper_cycle_before_commit(self):
         source = """

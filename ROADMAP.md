@@ -8,7 +8,7 @@ Completed milestones stay listed with their evidence so a later regression is
 visible as a change, not as a silently dropped line.
 
 1. **Done.** Publish the clean IR 0.3 revision, now runtime 0.2.0, with all
-   132 tests and the 50-program corpus reports.
+   145 tests and the 50-program corpus reports.
 2. **Done.** Generate a new IR 0.3 image on the native Linux x86_64 Actions job
    and rerun the dependent native Apple Silicon macOS arm64 proof without
    reusing any IR 0.2 image. Passed in Actions run 30509186641 at commit

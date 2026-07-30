@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -52,6 +52,40 @@ class Cell:
 
     def is_empty(self) -> bool:
         return isinstance(self.value, Empty)
+
+
+@dataclass(eq=False)
+class ClassValue:
+    """A class the VM owns outright.
+
+    This is not a host type object. It is a namespace of members the runtime
+    interprets, so every part of it encodes into the portable graph and no
+    `type()` is ever created.
+    """
+
+    class_id: str
+    name: str
+    members: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(eq=False)
+class InstanceValue:
+    """An instance of a VM-owned class, holding only portable attributes."""
+
+    cls: ClassValue
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(eq=False)
+class BoundMethodValue:
+    """A method looked up on an instance, before it is called.
+
+    Kept as a value rather than resolved inline so a checkpoint taken between
+    the lookup and the call serializes it like any other operand.
+    """
+
+    instance: InstanceValue
+    function: FunctionValue
 
 
 @dataclass(frozen=True)

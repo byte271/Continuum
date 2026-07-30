@@ -16,6 +16,9 @@ from .resources import PortableFile, ResourceManager
 from .values import (
     EMPTY,
     BoundAttrRef,
+    BoundMethodValue,
+    ClassValue,
+    InstanceValue,
     Cell,
     BuiltinRef,
     FunctionValue,
@@ -200,6 +203,9 @@ class Frame:
     # Closed-over bindings, kept separate from `locals` so a captured name is
     # one shared Cell rather than a per-frame copy.
     cells: dict[str, Cell] = field(default_factory=dict)
+    # True for an __init__ frame: the caller already holds the new instance,
+    # so this frame's return value is checked and dropped rather than pushed.
+    discard_result: bool = False
 
     def to_state(self) -> dict[str, Any]:
         return {
@@ -210,6 +216,7 @@ class Frame:
             "blocks": self.blocks,
             "finally_reasons": self.finally_reasons,
             "cells": self.cells,
+            "discard_result": self.discard_result,
         }
 
     @classmethod
@@ -222,6 +229,7 @@ class Frame:
             blocks=state["blocks"],
             finally_reasons=state["finally_reasons"],
             cells=state.get("cells", {}),
+            discard_result=state.get("discard_result", False),
         )
 
 
@@ -473,6 +481,24 @@ class VirtualMachine:
                 )
             )
             frame.pc += 1
+        elif op == "MAKE_CLASS":
+            names = arg["members"]
+            values = self._pop_many(stack, len(names))
+            stack.append(
+                ClassValue(arg["class_id"], arg["name"], dict(zip(names, values)))
+            )
+            frame.pc += 1
+        elif op == "STORE_ATTR_VALUE_FIRST":
+            self._require_stack(stack, 2, op)
+            target = stack.pop()
+            value = stack.pop()
+            if not isinstance(target, InstanceValue):
+                raise AttributeError(
+                    f"cannot set attribute on "
+                    f"{self._type_name(target)} object"
+                )
+            target.attributes[arg] = value
+            frame.pc += 1
         elif op == "MAKE_CELL":
             frame.cells[arg] = Cell()
             frame.pc += 1
@@ -534,6 +560,18 @@ class VirtualMachine:
             if isinstance(callable_value, FunctionValue):
                 frame.pc += 1
                 self._call_function(callable_value, list(positional), kwargs)
+            elif isinstance(callable_value, BoundMethodValue):
+                frame.pc += 1
+                self._call_function(
+                    callable_value.function,
+                    [callable_value.instance, *positional],
+                    kwargs,
+                )
+            elif isinstance(callable_value, ClassValue):
+                frame.pc += 1
+                self._instantiate(
+                    callable_value, list(positional), kwargs, stack
+                )
             else:
                 result = self._call_host(
                     callable_value, list(positional), kwargs
@@ -550,6 +588,16 @@ class VirtualMachine:
             if isinstance(callable_value, FunctionValue):
                 frame.pc += 1
                 self._call_function(callable_value, positional, kwargs)
+            elif isinstance(callable_value, BoundMethodValue):
+                frame.pc += 1
+                self._call_function(
+                    callable_value.function,
+                    [callable_value.instance, *positional],
+                    kwargs,
+                )
+            elif isinstance(callable_value, ClassValue):
+                frame.pc += 1
+                self._instantiate(callable_value, positional, kwargs, stack)
             else:
                 result = self._call_host(callable_value, positional, kwargs)
                 stack.append(result)
@@ -557,10 +605,16 @@ class VirtualMachine:
         elif op == "RETURN":
             self._require_stack(stack, 1, op)
             value = stack.pop()
-            self.frames.pop()
-            if self.frames:
+            finished = self.frames.pop()
+            if finished.discard_result:
+                if value is not None:
+                    raise TypeError(
+                        f"__init__() should return None, not "
+                        f"{self._type_name(value)!r}"
+                    )
+            elif self.frames:
                 self.frames[-1].stack.append(value)
-            else:
+            elif not self.frames:
                 self.result = value
         elif op == "IMPORT_MODULE":
             if arg not in ALLOWED_MODULES:
@@ -574,14 +628,16 @@ class VirtualMachine:
             receiver = stack.pop()
             if isinstance(receiver, ModuleRef):
                 stack.append(ModuleAttrRef(receiver.name, arg))
+            elif isinstance(receiver, InstanceValue):
+                stack.append(self._instance_attribute(receiver, arg))
+            elif isinstance(receiver, ClassValue):
+                if arg not in receiver.members:
+                    raise AttributeError(
+                        f"type object {receiver.name!r} has no attribute {arg!r}"
+                    )
+                stack.append(receiver.members[arg])
             else:
                 stack.append(BoundAttrRef(receiver, arg))
-            frame.pc += 1
-        elif op == "STORE_ATTR":
-            self._require_stack(stack, 2, op)
-            value = stack.pop()
-            receiver = stack.pop()
-            setattr(receiver, arg, value)
             frame.pc += 1
         elif op == "LOAD_SUBSCR":
             self._require_stack(stack, 2, op)
@@ -702,7 +758,11 @@ class VirtualMachine:
             raise ExecutionError(f"unknown opcode: {op!r}")
 
     def _call_function(
-        self, function: FunctionValue, positional: list[Any], kwargs: dict[str, Any]
+        self,
+        function: FunctionValue,
+        positional: list[Any],
+        kwargs: dict[str, Any],
+        discard_result: bool = False,
     ) -> None:
         definition = self.ir["functions"].get(function.function_id)
         if definition is None:
@@ -789,7 +849,13 @@ class VirtualMachine:
                 cell.set(locals_dict.pop(cellvar))
             cells[cellvar] = cell
         self.frames.append(
-            Frame(function.function_id, 0, locals_dict, cells=cells)
+            Frame(
+                function.function_id,
+                0,
+                locals_dict,
+                cells=cells,
+                discard_result=discard_result,
+            )
         )
 
     @staticmethod
@@ -805,6 +871,58 @@ class VirtualMachine:
                 else f"{total} positional arguments"
             )
         return phrase
+
+    @staticmethod
+    def _type_name(value: Any) -> str:
+        if isinstance(value, InstanceValue):
+            return value.cls.name
+        if isinstance(value, ClassValue):
+            return "type"
+        return type(value).__name__
+
+    def _instance_attribute(self, instance: InstanceValue, name: str) -> Any:
+        """Instance dictionary first, then the class, as Python does.
+
+        A function found on the class becomes a bound method value. There is
+        no descriptor protocol here, which is why inheritance and properties
+        are out of this milestone rather than half-supported.
+        """
+
+        if name in instance.attributes:
+            return instance.attributes[name]
+        member = instance.cls.members.get(name)
+        if member is None and name not in instance.cls.members:
+            raise AttributeError(
+                f"{instance.cls.name!r} object has no attribute {name!r}"
+            )
+        if isinstance(member, FunctionValue):
+            return BoundMethodValue(instance, member)
+        return member
+
+    def _instantiate(
+        self,
+        cls: ClassValue,
+        positional: list[Any],
+        kwargs: dict[str, Any],
+        stack: list[Any],
+    ) -> None:
+        instance = InstanceValue(cls, {})
+        initializer = cls.members.get("__init__")
+        if initializer is None:
+            if positional or kwargs:
+                raise TypeError(
+                    f"{cls.name}() takes no arguments"
+                )
+            stack.append(instance)
+            return
+        if not isinstance(initializer, FunctionValue):
+            raise TypeError(f"{cls.name}.__init__ is not callable")
+        # The new instance is pushed first so the frame that __init__ returns
+        # into leaves it on the stack as the call's value.
+        stack.append(instance)
+        self._call_function(
+            initializer, [instance, *positional], kwargs, discard_result=True
+        )
 
     def _callee_label(self, callable_value: Any) -> str:
         """Rebuild CPython's `__main__.f() ` call-site prefix.
@@ -1064,6 +1182,7 @@ VALID_OPS = {
     "LOAD_DEREF",
     "LOAD_SUBSCR",
     "MAKE_CELL",
+    "MAKE_CLASS",
     "MAKE_FUNCTION",
     "MATCH_EXC",
     "POP_BLOCK",
@@ -1074,6 +1193,7 @@ VALID_OPS = {
     "SAFEPOINT",
     "SETUP_EXCEPT",
     "SETUP_FINALLY",
+    "STORE_ATTR_VALUE_FIRST",
     "STORE_DEREF",
     "STORE_NAME",
     "STORE_SUBSCR_VALUE_FIRST",

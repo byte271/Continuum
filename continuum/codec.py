@@ -10,7 +10,10 @@ from typing import Any
 from .errors import ImageError, UnsupportedObjectError
 from .resources import PortableFile
 from .values import (
+    BoundMethodValue,
     Cell,
+    ClassValue,
+    InstanceValue,
     BoundAttrRef,
     BuiltinRef,
     FunctionValue,
@@ -116,6 +119,25 @@ class GraphEncoder:
                 node["empty"] = value.is_empty()
                 if not value.is_empty():
                     node["value"] = self._value(value.value)
+            return ref
+        if isinstance(value, ClassValue):
+            ref, node = self._reference(value, "class")
+            if node:
+                node["class_id"] = value.class_id
+                node["name"] = value.name
+                node["members"] = self._value(value.members)
+            return ref
+        if isinstance(value, InstanceValue):
+            ref, node = self._reference(value, "instance")
+            if node:
+                node["cls"] = self._value(value.cls)
+                node["attributes"] = self._value(value.attributes)
+            return ref
+        if isinstance(value, BoundMethodValue):
+            ref, node = self._reference(value, "bound_method")
+            if node:
+                node["instance"] = self._value(value.instance)
+                node["function"] = self._value(value.function)
             return ref
         if isinstance(value, FunctionValue):
             ref, node = self._reference(value, "function")
@@ -296,6 +318,46 @@ class GraphDecoder:
                 )
             except TypeError as exc:
                 raise ImageError("unhashable set item in heap") from exc
+            return result
+        if kind == "class":
+            result = ClassValue(
+                self._plain_str(node, "class_id"), self._plain_str(node, "name")
+            )
+            self.memo[node_id] = result
+            members = self._value(node.get("members"), depth + 1)
+            if not isinstance(members, dict) or any(
+                not isinstance(key, str) for key in members
+            ):
+                raise ImageError("class members are not a string-keyed mapping")
+            result.members = members
+            return result
+        if kind == "instance":
+            result = InstanceValue.__new__(InstanceValue)
+            self.memo[node_id] = result
+            cls = self._value(node.get("cls"), depth + 1)
+            if not isinstance(cls, ClassValue):
+                raise ImageError("instance does not reference a class")
+            attributes = self._value(node.get("attributes"), depth + 1)
+            if not isinstance(attributes, dict) or any(
+                not isinstance(key, str) for key in attributes
+            ):
+                raise ImageError(
+                    "instance attributes are not a string-keyed mapping"
+                )
+            result.cls = cls
+            result.attributes = attributes
+            return result
+        if kind == "bound_method":
+            result = BoundMethodValue.__new__(BoundMethodValue)
+            self.memo[node_id] = result
+            instance = self._value(node.get("instance"), depth + 1)
+            function = self._value(node.get("function"), depth + 1)
+            if not isinstance(instance, InstanceValue) or not isinstance(
+                function, FunctionValue
+            ):
+                raise ImageError("invalid bound method record")
+            result.instance = instance
+            result.function = function
             return result
         if kind == "cell":
             # Allocated before its contents so a closure that reaches itself

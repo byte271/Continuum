@@ -85,7 +85,21 @@ for key in mapping:
                 "        nonlocal missing\n"
                 "        missing = 2\n"
             ),
-            "class definition": "class Value:\n    pass\n",
+            "class with a base": "class Value(dict):\n    pass\n",
+            "class with a metaclass": (
+                "class Value(metaclass=type):\n    pass\n"
+            ),
+            "class decorator": (
+                "def deco(cls):\n"
+                "    return cls\n"
+                "\n"
+                "@deco\n"
+                "class Value:\n"
+                "    pass\n"
+            ),
+            "unsupported class body statement": (
+                "class Value:\n    for i in range(2):\n        pass\n"
+            ),
             "list comprehension": "values = [x for x in range(3)]\n",
             "nested comprehension": (
                 "values = [(x, y) for x in range(2) for y in range(2)]\n"
@@ -116,11 +130,6 @@ for key in mapping:
                 "    pass\n"
             ),
             "annotated assignment": "value: int = 1\n",
-            "attribute assignment": (
-                "import random\n"
-                "rng = random.Random(1)\n"
-                "rng.extra = 2\n"
-            ),
             "f-string conversion": "value = f'{1!r}'\n",
             "chained comparison": "value = 1 < 2 < 3\n",
         }
