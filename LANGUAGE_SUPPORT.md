@@ -34,8 +34,10 @@ closed builtin, method, module, object, and resource model documented here.
 | Required positional parameters | supported | Argument count and binding validated |
 | Keyword calls | supported | Named binding, duplicate, missing, and unknown checks |
 | Positional default arguments | supported | Evaluated once at `def`; mutable identity, omission, keyword binding, image restoration, and every safe point tested |
-| Positional-only / keyword-only parameters | explicitly rejected | No calling convention support |
-| `*args` / `**kwargs` parameters | explicitly rejected | No variadic frame binding |
+| Positional-only / keyword-only parameters | supported | Full `/` and `*` boundaries, with CPython's binding errors reproduced |
+| `*args` / `**kwargs` parameters | supported | Collected as a portable tuple and dict in frame locals |
+| `f(*iterable)` / `f(**mapping)` call syntax | supported | Gathered left to right into one list and dict; duplicate keywords rejected |
+| Keyword-only defaults | supported | Definition-time evaluation with identity preserved across calls and images |
 | Starred / double-star call arguments | explicitly rejected | No expansion IR |
 | Nested functions without captures | supported | Function value is stored in the enclosing local |
 | Closures / free-variable capture | explicitly rejected | Compiler detects a read from an enclosing function scope |

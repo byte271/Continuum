@@ -8,6 +8,9 @@ from typing import Any
 class FunctionValue:
     function_id: str
     defaults: tuple[Any, ...] = ()
+    # Keyword-only defaults, aligned with the definition's kw_default_names.
+    # Held separately because they bind by name, not by position.
+    kw_defaults: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True)

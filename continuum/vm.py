@@ -451,10 +451,61 @@ class VirtualMachine:
                 stack.pop()
                 frame.pc += 1
         elif op == "MAKE_FUNCTION":
-            default_count = arg["default_count"]
-            defaults = tuple(self._pop_many(stack, default_count))
-            stack.append(FunctionValue(arg["function_id"], defaults))
+            # Keyword defaults were pushed after positional ones, so they come
+            # off first.
+            keyword_defaults = tuple(
+                self._pop_many(stack, arg.get("kw_default_count", 0))
+            )
+            defaults = tuple(self._pop_many(stack, arg["default_count"]))
+            stack.append(
+                FunctionValue(arg["function_id"], defaults, keyword_defaults)
+            )
             frame.pc += 1
+        elif op == "LIST_EXTEND":
+            self._require_stack(stack, 2, op)
+            addition = stack.pop()
+            if not isinstance(addition, (list, tuple, set, frozenset, range)):
+                raise TypeError(
+                    f"{self._callee_label(stack[-2])}argument after * must be "
+                    f"an iterable, not {type(addition).__name__}"
+                )
+            stack[-1].extend(addition)
+            frame.pc += 1
+        elif op == "DICT_MERGE":
+            self._require_stack(stack, 2, op)
+            addition = stack.pop()
+            if not isinstance(addition, dict):
+                raise TypeError(
+                    f"{self._callee_label(stack[-3])}argument after ** must "
+                    f"be a mapping, not {type(addition).__name__}"
+                )
+            target = stack[-1]
+            for key, value in addition.items():
+                if not isinstance(key, str):
+                    raise TypeError("keywords must be strings")
+                if key in target:
+                    # CPython names the callee here because the merge happens
+                    # at the call site. The callee is still on the stack.
+                    raise TypeError(
+                        f"{self._callee_label(stack[-3])}got multiple values "
+                        f"for keyword argument {key!r}"
+                    )
+                target[key] = value
+            frame.pc += 1
+        elif op == "CALL_EX":
+            self._require_stack(stack, 3, op)
+            kwargs = stack.pop()
+            positional = stack.pop()
+            callable_value = stack.pop()
+            if isinstance(callable_value, FunctionValue):
+                frame.pc += 1
+                self._call_function(callable_value, list(positional), kwargs)
+            else:
+                result = self._call_host(
+                    callable_value, list(positional), kwargs
+                )
+                stack.append(result)
+                frame.pc += 1
         elif op == "CALL":
             keyword_names = arg["keywords"]
             keyword_values = self._pop_many(stack, len(keyword_names))
@@ -616,34 +667,118 @@ class VirtualMachine:
         definition = self.ir["functions"].get(function.function_id)
         if definition is None:
             raise NameError(function.function_id)
+        name = definition["name"]
         parameters = definition["params"]
-        if len(positional) > len(parameters):
-            raise TypeError(
-                f"{definition['name']}() takes at most "
-                f"{len(parameters)} arguments"
-            )
+        posonly_count = definition.get("posonly_count", 0)
+        vararg = definition.get("vararg")
+        keyword_only = definition.get("kwonly", [])
+        kwarg = definition.get("kwarg")
+        keyword_default_names = definition.get("kw_default_names", [])
+        if len(function.defaults) != definition["default_count"] or len(
+            function.kw_defaults
+        ) != len(keyword_default_names):
+            raise TypeError(f"invalid default state for {name}()")
+
         locals_dict: dict[str, Any] = {}
-        for name, value in zip(parameters, positional):
-            locals_dict[name] = value
-        for name, value in kwargs.items():
-            if name not in parameters or name in locals_dict:
-                raise TypeError(f"invalid argument {name!r}")
-            locals_dict[name] = value
-        default_count = definition["default_count"]
-        if len(function.defaults) != default_count:
+        if len(positional) > len(parameters) and vararg is None:
             raise TypeError(
-                f"invalid default state for {definition['name']}()"
+                f"{name}() takes {self._argument_count_phrase(definition)} "
+                f"but {len(positional)} "
+                f"{'was' if len(positional) == 1 else 'were'} given"
             )
-        first_default = len(parameters) - default_count
+        for parameter, value in zip(parameters, positional):
+            locals_dict[parameter] = value
+        if vararg is not None:
+            locals_dict[vararg] = tuple(positional[len(parameters) :])
+
+        positional_only = set(parameters[:posonly_count])
+        bindable = set(parameters[posonly_count:]) | set(keyword_only)
+        extra: dict[str, Any] = {}
+        for key, value in kwargs.items():
+            if key in bindable:
+                if key in locals_dict:
+                    raise TypeError(
+                        f"{name}() got multiple values for argument {key!r}"
+                    )
+                locals_dict[key] = value
+            elif kwarg is not None:
+                # A positional-only name given by keyword is not an error when
+                # the function collects **kwargs; it lands there instead.
+                extra[key] = value
+            elif key in positional_only:
+                raise TypeError(
+                    f"{name}() got some positional-only arguments passed as "
+                    f"keyword arguments: '{key}'"
+                )
+            else:
+                raise TypeError(
+                    f"{name}() got an unexpected keyword argument {key!r}"
+                )
+        if kwarg is not None:
+            locals_dict[kwarg] = extra
+
+        first_default = len(parameters) - definition["default_count"]
         for index, value in enumerate(function.defaults, first_default):
             locals_dict.setdefault(parameters[index], value)
-        missing = [name for name in parameters if name not in locals_dict]
+        for key, value in zip(keyword_default_names, function.kw_defaults):
+            locals_dict.setdefault(key, value)
+
+        missing = [item for item in parameters if item not in locals_dict]
         if missing:
             raise TypeError(
-                f"missing arguments for {definition['name']}(): "
-                + ", ".join(missing)
+                f"{name}() missing {len(missing)} required positional "
+                f"argument{'' if len(missing) == 1 else 's'}: "
+                + self._name_list(missing)
+            )
+        missing = [item for item in keyword_only if item not in locals_dict]
+        if missing:
+            raise TypeError(
+                f"{name}() missing {len(missing)} required keyword-only "
+                f"argument{'' if len(missing) == 1 else 's'}: "
+                + self._name_list(missing)
             )
         self.frames.append(Frame(function.function_id, 0, locals_dict))
+
+    @staticmethod
+    def _argument_count_phrase(definition: dict[str, Any]) -> str:
+        total = len(definition["params"])
+        required = total - definition["default_count"]
+        if definition["default_count"]:
+            phrase = f"from {required} to {total} positional arguments"
+        else:
+            phrase = (
+                f"{total} positional argument"
+                if total == 1
+                else f"{total} positional arguments"
+            )
+        return phrase
+
+    def _callee_label(self, callable_value: Any) -> str:
+        """Rebuild CPython's `__main__.f() ` call-site prefix.
+
+        A function id is `<parent name>.<name>@<line>`, so the dotted path
+        rebuilds the qualname CPython reports, with `<locals>` between levels.
+        Only the parent recorded in the id is available, so a function nested
+        more than one level deep gets a shorter prefix than CPython's.
+        """
+
+        if not isinstance(callable_value, FunctionValue):
+            return ""
+        if callable_value.function_id not in self.ir["functions"]:
+            return ""
+        path = callable_value.function_id.rsplit("@", 1)[0].split(".")
+        if path and path[0] == "__module__":
+            path = path[1:]
+        if not path:
+            return ""
+        return f"__main__.{'.<locals>.'.join(path)}() "
+
+    @staticmethod
+    def _name_list(names: list[str]) -> str:
+        quoted = [f"'{item}'" for item in names]
+        if len(quoted) == 1:
+            return quoted[0]
+        return ", ".join(quoted[:-1]) + " and " + quoted[-1]
 
     def _call_host(
         self, callable_value: Any, positional: list[Any], kwargs: dict[str, Any]
@@ -834,9 +969,11 @@ VALID_OPS = {
     "BUILD_STRING",
     "BUILD_TUPLE",
     "CALL",
+    "CALL_EX",
     "COMPARE",
     "CONST",
     "DELETE_NAME",
+    "DICT_MERGE",
     "DUP_TOP",
     "END_FINALLY",
     "ENTER_FINALLY_NORMAL",
@@ -850,6 +987,7 @@ VALID_OPS = {
     "JUMP_IF_TRUE_OR_POP",
     "LOAD_ATTR",
     "LOAD_NAME",
+    "LIST_EXTEND",
     "LOAD_SUBSCR",
     "MAKE_FUNCTION",
     "MATCH_EXC",

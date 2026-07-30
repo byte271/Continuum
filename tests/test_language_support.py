@@ -77,9 +77,7 @@ for key in mapping:
 
     def test_unsupported_constructs_are_rejected_during_compilation(self):
         cases = {
-            "variadic positional parameters": "def f(*values):\n    return 1\n",
-            "variadic keyword parameters": "def f(**values):\n    return 1\n",
-            "keyword-only parameters": "def f(*, value):\n    return value\n",
+            "duplicate parameter name": "def f(a, *, a):\n    return a\n",
             "global declaration": "def f():\n    global value\n    value = 1\n",
             "nonlocal declaration": (
                 "def outer():\n"
@@ -132,8 +130,6 @@ for key in mapping:
             ),
             "f-string conversion": "value = f'{1!r}'\n",
             "chained comparison": "value = 1 < 2 < 3\n",
-            "starred call": "value = max(*[1, 2])\n",
-            "double-star call": "value = dict(**{'a': 1})\n",
         }
         for name, source in cases.items():
             with self.subTest(name=name):

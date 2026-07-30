@@ -112,7 +112,9 @@ answer = add()
             ["missing.py"],
             "missing.py",
         )
-        with self.assertRaisesRegex(ExecutionError, "missing arguments.*left"):
+        with self.assertRaisesRegex(
+            ExecutionError, "missing 1 required positional argument: 'left'"
+        ):
             vm.run()
 
 

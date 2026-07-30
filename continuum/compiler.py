@@ -227,11 +227,19 @@ class FunctionCompiler:
             function_id = self.owner.compile_function(node, self)
             for default in node.args.defaults:
                 self.expression(default)
+            keyword_defaults = [
+                default
+                for default in node.args.kw_defaults
+                if default is not None
+            ]
+            for default in keyword_defaults:
+                self.expression(default)
             self.emit(
                 "MAKE_FUNCTION",
                 {
                     "function_id": function_id,
                     "default_count": len(node.args.defaults),
+                    "kw_default_count": len(keyword_defaults),
                 },
                 line,
             )
@@ -438,10 +446,11 @@ class FunctionCompiler:
             self.expression(node.comparators[0])
             self.emit("COMPARE", self.lookup(COMPARE_OPS, node.ops[0], node), line)
         elif isinstance(node, ast.Call):
-            if any(isinstance(arg, ast.Starred) for arg in node.args):
-                self.unsupported(node, "starred call arguments")
-            if any(keyword.arg is None for keyword in node.keywords):
-                self.unsupported(node, "double-star call arguments")
+            if any(isinstance(arg, ast.Starred) for arg in node.args) or any(
+                keyword.arg is None for keyword in node.keywords
+            ):
+                self.compile_unpacking_call(node, line)
+                return
             self.expression(node.func)
             for arg in node.args:
                 self.expression(arg)
@@ -495,6 +504,53 @@ class FunctionCompiler:
             self.emit("BUILD_STRING", len(node.values), line)
         else:
             self.unsupported(node, "expression")
+
+    def compile_unpacking_call(self, node: ast.Call, line: int) -> None:
+        """Compile a call containing `*args` or `**kwargs`.
+
+        Arguments are gathered into one list and one dict so the callee sees a
+        single portable pair. Buffered plain arguments are flushed before each
+        unpacking so evaluation stays strictly left to right.
+        """
+
+        self.expression(node.func)
+
+        self.emit("BUILD_LIST", 0, line)
+        buffered = 0
+        for argument in node.args:
+            if isinstance(argument, ast.Starred):
+                if buffered:
+                    self.emit("BUILD_LIST", buffered, line)
+                    self.emit("LIST_EXTEND", line=line)
+                    buffered = 0
+                self.expression(argument.value)
+                self.emit("LIST_EXTEND", line=line)
+            else:
+                self.expression(argument)
+                buffered += 1
+        if buffered:
+            self.emit("BUILD_LIST", buffered, line)
+            self.emit("LIST_EXTEND", line=line)
+
+        self.emit("BUILD_DICT", 0, line)
+        buffered = 0
+        for keyword in node.keywords:
+            if keyword.arg is None:
+                if buffered:
+                    self.emit("BUILD_DICT", buffered, line)
+                    self.emit("DICT_MERGE", line=line)
+                    buffered = 0
+                self.expression(keyword.value)
+                self.emit("DICT_MERGE", line=line)
+            else:
+                self.emit("CONST", {"kind": "str", "value": keyword.arg}, line)
+                self.expression(keyword.value)
+                buffered += 1
+        if buffered:
+            self.emit("BUILD_DICT", buffered, line)
+            self.emit("DICT_MERGE", line=line)
+
+        self.emit("CALL_EX", line=line)
 
     def compile_bool(self, node: ast.BoolOp) -> None:
         self.expression(node.values[0])
@@ -584,17 +640,28 @@ class ProgramCompiler:
             raise CompileError(
                 f"{self.source_name}:{node.lineno}: decorators are unsupported"
             )
-        if (
-            node.args.posonlyargs
-            or node.args.kwonlyargs
-            or node.args.vararg
-            or node.args.kwarg
-        ):
+        args = node.args
+        # `params` is every parameter that can be filled positionally, with the
+        # positional-only ones first, matching the order CPython binds them.
+        parameters = [arg.arg for arg in (*args.posonlyargs, *args.args)]
+        vararg = args.vararg.arg if args.vararg else None
+        keyword_only = [arg.arg for arg in args.kwonlyargs]
+        kwarg = args.kwarg.arg if args.kwarg else None
+        keyword_default_names = [
+            arg.arg
+            for arg, default in zip(args.kwonlyargs, args.kw_defaults)
+            if default is not None
+        ]
+        bound = [*parameters, *keyword_only]
+        if vararg:
+            bound.append(vararg)
+        if kwarg:
+            bound.append(kwarg)
+        if len(set(bound)) != len(bound):
             raise CompileError(
-                f"{self.source_name}:{node.lineno}: only positional parameters are supported"
+                f"{self.source_name}:{node.lineno}: duplicate parameter name"
             )
-        parameters = [arg.arg for arg in node.args.args]
-        local_names = collect_local_names(node.body, parameters)
+        local_names = collect_local_names(node.body, bound)
         function_id = f"{parent.name}.{node.name}@{node.lineno}"
         enclosing_locals = parent.enclosing_locals
         if parent.function_id != "__module__":
@@ -613,7 +680,12 @@ class ProgramCompiler:
             "id": function_id,
             "name": node.name,
             "params": parameters,
-            "default_count": len(node.args.defaults),
+            "posonly_count": len(args.posonlyargs),
+            "vararg": vararg,
+            "kwonly": keyword_only,
+            "kwarg": kwarg,
+            "default_count": len(args.defaults),
+            "kw_default_names": keyword_default_names,
             "local_names": sorted(local_names),
             "code": compiler.code,
         }

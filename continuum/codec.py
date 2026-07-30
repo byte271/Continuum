@@ -114,6 +114,7 @@ class GraphEncoder:
             if node:
                 node["function_id"] = value.function_id
                 node["defaults"] = self._value(value.defaults)
+                node["kw_defaults"] = self._value(value.kw_defaults)
             return ref
         if isinstance(value, BuiltinRef):
             ref, node = self._reference(value, "builtin_ref")
@@ -347,9 +348,15 @@ class GraphDecoder:
                 defaults = self._value(node.get("defaults"), depth + 1)
                 if not isinstance(defaults, tuple):
                     raise ImageError("function defaults are not a tuple")
+                if "kw_defaults" not in node:
+                    raise ImageError("function record has no keyword defaults")
+                kw_defaults = self._value(node["kw_defaults"], depth + 1)
+                if not isinstance(kw_defaults, tuple):
+                    raise ImageError("function keyword defaults are not a tuple")
                 result = FunctionValue(
                     self._plain_str(node, "function_id"),
                     defaults,
+                    kw_defaults,
                 )
             elif kind == "builtin_ref":
                 result = BuiltinRef(self._plain_str(node, "name"))
