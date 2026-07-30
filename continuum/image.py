@@ -40,6 +40,18 @@ SUPPORTED_CAPABILITIES = {
     "graph-codec-0.1",
     "portable-readonly-files",
 }
+# The target pairs this runtime will attempt to restore. Membership is a
+# format-compatibility decision only; it is never evidence that a source or
+# target platform has been exercised. PORTABILITY.md holds that evidence.
+TARGET_OPERATING_SYSTEMS = ("Linux", "Darwin", "Windows")
+TARGET_ARCHITECTURES = ("x86_64", "arm64")
+TARGET_PLATFORMS = (
+    {"os": "Linux", "architecture": "x86_64"},
+    {"os": "Linux", "architecture": "arm64"},
+    {"os": "Darwin", "architecture": "x86_64"},
+    {"os": "Darwin", "architecture": "arm64"},
+    {"os": "Windows", "architecture": "x86_64"},
+)
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -150,15 +162,9 @@ def save_image(
             "python_version": _runtime_python(),
         },
         "target_compatibility": {
-            "operating_systems": ["Linux", "Darwin", "Windows"],
-            "architectures": ["x86_64", "arm64"],
-            "platforms": [
-                {"os": "Linux", "architecture": "x86_64"},
-                {"os": "Linux", "architecture": "arm64"},
-                {"os": "Darwin", "architecture": "x86_64"},
-                {"os": "Darwin", "architecture": "arm64"},
-                {"os": "Windows", "architecture": "x86_64"},
-            ],
+            "operating_systems": list(TARGET_OPERATING_SYSTEMS),
+            "architectures": list(TARGET_ARCHITECTURES),
+            "platforms": [dict(item) for item in TARGET_PLATFORMS],
             "python_version": SUPPORTED_PYTHON,
             "runtime_implementation": "continuum-vm",
             "runtime_version": __version__,

@@ -28,14 +28,60 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(report["continuum_version"], __version__)
         self.assertEqual(report["continuum_ir_version"], IR_VERSION)
         self.assertEqual(report["python_version"], SUPPORTED_PYTHON)
-        self.assertIn(
-            "fresh exact-commit proof",
-            report["current_runtime_cross_platform"],
+        self.assertEqual(
+            report["verified_cross_platform_paths"],
+            ["Linux x86_64 -> macOS arm64"],
         )
-        self.assertIn("IR 0.3", report["verified_migration"])
-        self.assertIn("30497170058", report["verified_migration"])
+        self.assertEqual(
+            report["verified_same_host_targets"],
+            ["Linux x86_64", "macOS arm64", "Windows x86_64"],
+        )
+        self.assertIn("Windows x86_64", report["format_compatible_targets"])
+        self.assertIn(
+            "runtime-bundles.yml",
+            report["evidence"]["verified_same_host_targets"],
+        )
+        self.assertIn(
+            "cross-platform-proof.yml",
+            report["evidence"]["verified_cross_platform_paths"],
+        )
         self.assertFalse(report["self_contained"])
         self.assertEqual(report["problems"], [])
+
+    def test_doctor_never_reports_format_compatibility_as_verified(self):
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"CONTINUUM_BUNDLE_MANIFEST": ""}),
+            redirect_stdout(output),
+        ):
+            _doctor(argparse.Namespace(json=True))
+        report = json.loads(output.getvalue())
+
+        # A pair the format accepts must never imply a proven path. Windows is
+        # format-compatible and same-host verified, but no cross-platform
+        # workflow has ever produced or resumed a Windows image.
+        self.assertNotEqual(
+            report["format_compatible_targets"],
+            report["verified_same_host_targets"],
+        )
+        for path in report["verified_cross_platform_paths"]:
+            self.assertNotIn("Windows", path)
+        for target in report["verified_same_host_targets"]:
+            self.assertIn(target, report["format_compatible_targets"])
+
+        text = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"CONTINUUM_BUNDLE_MANIFEST": ""}),
+            redirect_stdout(text),
+        ):
+            _doctor(argparse.Namespace(json=False))
+        rendered = text.getvalue()
+        self.assertIn("not evidence of a verified continuation path", rendered)
+        self.assertIn(
+            "Verified cross-platform continuation: "
+            "Linux x86_64 -> macOS arm64",
+            rendered,
+        )
 
     def test_doctor_rejects_wrong_python_version(self):
         output = io.StringIO()
@@ -64,7 +110,13 @@ class DoctorTests(unittest.TestCase):
         report = json.loads(output.getvalue())
         self.assertEqual(report["os"], "Windows")
         self.assertEqual(report["architecture"], "x86_64")
-        self.assertIn("Windows x86_64", report["compatible_image_targets"])
+        self.assertIn("Windows x86_64", report["format_compatible_targets"])
+        self.assertEqual(report["current_target"], "Windows x86_64")
+        self.assertTrue(report["current_target_same_host_verified"])
+        self.assertNotIn(
+            "Windows x86_64 -> ",
+            " ".join(report["verified_cross_platform_paths"]),
+        )
 
     def test_doctor_validates_self_contained_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:

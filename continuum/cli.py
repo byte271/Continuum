@@ -15,7 +15,7 @@ from pathlib import Path
 from . import IR_VERSION, SUPPORTED_PYTHON, __version__
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
-from .image import inspect_image, load_image, verify_image
+from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
 from .resources import is_portable_absolute_path
 from .session import (
     SessionController,
@@ -24,6 +24,39 @@ from .session import (
     request_freeze,
 )
 from .vm import VirtualMachine
+
+_DISPLAY_OS = {"Linux": "Linux", "Darwin": "macOS", "Windows": "Windows"}
+
+BUNDLE_WORKFLOW_URL = (
+    "https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml"
+)
+PROOF_WORKFLOW_URL = (
+    "https://github.com/byte271/Continuum/actions/workflows/"
+    "cross-platform-proof.yml"
+)
+
+# Hosts on which the complete suite, including checkpoint, source exit, and
+# resume in a new process, runs natively in BUNDLE_WORKFLOW_URL.
+VERIFIED_SAME_HOST_TARGETS = (
+    "Linux x86_64",
+    "macOS arm64",
+    "Windows x86_64",
+)
+# Directions in which one host has written an image that another host resumed,
+# proven by the two dependent jobs in PROOF_WORKFLOW_URL. A pair belongs here
+# only after that workflow has run it end to end.
+VERIFIED_CROSS_PLATFORM_PATHS = ("Linux x86_64 -> macOS arm64",)
+
+
+def _platform_label(system: str, architecture: str) -> str:
+    return f"{_DISPLAY_OS.get(system, system)} {architecture}"
+
+
+def _format_compatible_targets() -> tuple[str, ...]:
+    return tuple(
+        _platform_label(entry["os"], entry["architecture"])
+        for entry in TARGET_PLATFORMS
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -220,6 +253,7 @@ def _doctor(args: argparse.Namespace) -> int:
                         f"expected {value!r}, got {bundle_manifest.get(key)!r}"
                     )
 
+    current_target = _platform_label(current_system, current_machine)
     report = {
         "continuum_version": __version__,
         "continuum_ir_version": IR_VERSION,
@@ -231,21 +265,25 @@ def _doctor(args: argparse.Namespace) -> int:
         "continuum_home": str(continuum_home()),
         "capture_file_policies": ["strict", "bundle"],
         "restore_file_policies": ["strict", "relocate", "bundle"],
-        "compatible_image_targets": [
-            "Linux x86_64",
-            "Linux arm64",
-            "macOS x86_64",
-            "macOS arm64",
-            "Windows x86_64",
-        ],
-        "verified_migration": (
-            "IR 0.3 Linux x86_64 -> macOS arm64, Actions run 30497170058, "
-            "commit 32edf7a66162b155c8ccdb4ae75fb545e037604d"
+        # What this runtime will attempt to restore. Not evidence.
+        "format_compatible_targets": list(_format_compatible_targets()),
+        # Where a checkpoint has been resumed by a new process on the same
+        # host, and between which hosts an image has actually moved.
+        "verified_same_host_targets": list(VERIFIED_SAME_HOST_TARGETS),
+        "verified_cross_platform_paths": list(VERIFIED_CROSS_PLATFORM_PATHS),
+        "current_target": current_target,
+        "current_target_same_host_verified": (
+            current_target in VERIFIED_SAME_HOST_TARGETS
         ),
-        "current_runtime_cross_platform": (
-            "verified for IR 0.3 Linux x86_64 -> macOS arm64; "
-            "release publication requires a fresh exact-commit proof"
-        ),
+        "evidence": {
+            "format_compatible_targets": (
+                "image manifest target_compatibility; a listed pair is "
+                "accepted by this runtime and is not evidence that any "
+                "continuation on that pair has been run"
+            ),
+            "verified_same_host_targets": BUNDLE_WORKFLOW_URL,
+            "verified_cross_platform_paths": PROOF_WORKFLOW_URL,
+        },
         "self_contained": bundle_manifest is not None,
         "bundle_manifest": manifest_path,
         "problems": problems,
@@ -264,13 +302,31 @@ def _doctor(args: argparse.Namespace) -> int:
         )
         print(f"Host: {report['os']} {report['architecture']}")
         print(
-            "Accepted image target metadata: "
-            + ", ".join(report["compatible_image_targets"])
+            "Format-compatible image targets: "
+            + ", ".join(report["format_compatible_targets"])
         )
-        print(f"Verified historical migration: {report['verified_migration']}")
         print(
-            "Current runtime cross-platform proof: "
-            + report["current_runtime_cross_platform"]
+            "  accepted by this runtime; not evidence of a verified "
+            "continuation path"
+        )
+        print(
+            "Verified same-host continuation: "
+            + ", ".join(report["verified_same_host_targets"])
+        )
+        print(f"  evidence: {BUNDLE_WORKFLOW_URL}")
+        print(
+            "Verified cross-platform continuation: "
+            + ", ".join(report["verified_cross_platform_paths"])
+        )
+        print(f"  evidence: {PROOF_WORKFLOW_URL}")
+        print(
+            "This host: "
+            + report["current_target"]
+            + (
+                "; same-host continuation verified"
+                if report["current_target_same_host_verified"]
+                else "; same-host continuation not verified on this target"
+            )
         )
         print(f"Continuum home: {report['continuum_home']}")
         print(
