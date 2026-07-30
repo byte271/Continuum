@@ -132,7 +132,7 @@ the author. Version 0.1 does not implement signatures and reports
 The current writer requires:
 
 - image format 0.1;
-- IR 0.3;
+- IR 0.4;
 - Continuum runtime 0.2.0;
 - CPython 3.12.13;
 - target OS Linux, Darwin, or Windows;

@@ -101,6 +101,11 @@ class FunctionCompiler:
         self.enclosing_locals = enclosing_locals
         self.code: list[dict[str, Any]] = []
         self.loops: list[LoopContext] = []
+        # Enclosing protected regions in this function. `protect_depth` counts
+        # every active control block; `finally_depth` counts only those whose
+        # cleanup must still run before control leaves.
+        self.protect_depth = 0
+        self.finally_depth = 0
 
     def emit(self, op: str, arg: Any = None, line: int = 0) -> int:
         instruction = {"op": op, "line": line}
@@ -189,6 +194,11 @@ class FunctionCompiler:
         elif isinstance(node, ast.Break):
             if not self.loops:
                 self.unsupported(node, "break outside loop")
+            if self.protect_depth:
+                # Jumping inside the frame would leave the control block on
+                # the frame, so the next exception would unwind to a region
+                # the program already left.
+                self.unsupported(node, "break out of try")
             for _ in range(self.loops[-1].break_stack_cleanup):
                 self.emit("POP_TOP", line=line)
             jump = self.emit("JUMP", -1, line)
@@ -196,11 +206,18 @@ class FunctionCompiler:
         elif isinstance(node, ast.Continue):
             if not self.loops:
                 self.unsupported(node, "continue outside loop")
+            if self.protect_depth:
+                self.unsupported(node, "continue out of try")
             self.emit("SAFEPOINT", line=line)
             self.emit("JUMP", self.loops[-1].continue_target, line)
         elif isinstance(node, ast.Return):
             if self.function_id == "__module__":
                 self.unsupported(node, "return at module scope")
+            if self.finally_depth:
+                # RETURN discards the frame, which would skip a finally body
+                # that is still owed. Returning out of try/except alone is
+                # safe: the frame's control blocks die with the frame.
+                self.unsupported(node, "return out of try/finally")
             if node.value is None:
                 self.emit("CONST", {"kind": "none"}, line)
             else:
@@ -244,7 +261,7 @@ class FunctionCompiler:
             self.expression(node.exc)
             self.emit("RAISE", line=line)
         elif isinstance(node, ast.Try):
-            self.compile_try_finally(node)
+            self.compile_try(node)
         elif isinstance(node, ast.Pass):
             self.safe(node)
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
@@ -252,14 +269,38 @@ class FunctionCompiler:
         else:
             self.unsupported(node)
 
-    def compile_try_finally(self, node: ast.Try) -> None:
-        if node.handlers or node.orelse or not node.finalbody:
-            self.unsupported(node, "only try/finally is supported")
-        for child in ast.walk(ast.Module(body=node.body, type_ignores=[])):
-            if isinstance(child, (ast.Return, ast.Break, ast.Continue)):
-                self.unsupported(node, "control transfer out of try")
+    def compile_try(self, node: ast.Try) -> None:
+        if not node.handlers and not node.finalbody:
+            self.unsupported(node, "try without except or finally")
+        if node.orelse and not node.handlers:
+            self.unsupported(node, "try/else without except")
+        if node.finalbody and node.handlers:
+            # try/except/finally is exactly a try/finally wrapping a
+            # try/except, and reusing that nesting keeps one implementation of
+            # each construct.
+            inner = ast.Try(
+                body=node.body,
+                handlers=node.handlers,
+                orelse=node.orelse,
+                finalbody=[],
+            )
+            ast.copy_location(inner, node)
+            self.compile_try_finally_region([inner], node)
+            return
+        if node.finalbody:
+            self.compile_try_finally_region(node.body, node)
+            return
+        self.compile_try_except(node)
+
+    def compile_try_finally_region(
+        self, body: list[ast.stmt], node: ast.Try
+    ) -> None:
         setup = self.emit("SETUP_FINALLY", -1, node.lineno)
-        self.statements(node.body)
+        self.protect_depth += 1
+        self.finally_depth += 1
+        self.statements(body)
+        self.finally_depth -= 1
+        self.protect_depth -= 1
         self.emit("POP_BLOCK", line=node.lineno)
         self.emit("ENTER_FINALLY_NORMAL", line=node.lineno)
         jump = self.emit("JUMP", -1, node.lineno)
@@ -269,6 +310,54 @@ class FunctionCompiler:
         self.emit("SAFEPOINT", line=node.lineno)
         self.statements(node.finalbody)
         self.emit("END_FINALLY", line=node.lineno)
+        self.safe(node)
+
+    def compile_try_except(self, node: ast.Try) -> None:
+        setup = self.emit("SETUP_EXCEPT", -1, node.lineno)
+        self.protect_depth += 1
+        self.statements(node.body)
+        self.protect_depth -= 1
+        self.emit("POP_BLOCK", line=node.lineno)
+        self.statements(node.orelse)
+        normal_jump = self.emit("JUMP", -1, node.lineno)
+
+        # Handler dispatch. On entry the live exception is the top of stack.
+        self.patch(setup, len(self.code))
+        self.emit("SAFEPOINT", line=node.lineno)
+        end_jumps: list[int] = []
+        saw_bare = False
+        for handler in node.handlers:
+            line = handler.lineno
+            if saw_bare:
+                self.unsupported(handler, "except clause after a bare except")
+            if handler.type is None:
+                saw_bare = True
+                next_handler = None
+            else:
+                self.emit("DUP_TOP", line=line)
+                self.expression(handler.type)
+                self.emit("MATCH_EXC", line=line)
+                next_handler = self.emit("JUMP_IF_FALSE", -1, line)
+            if handler.name is None:
+                self.emit("POP_TOP", line=line)
+            else:
+                self.emit("STORE_NAME", handler.name, line)
+                self.local_names.add(handler.name)
+            self.emit("SAFEPOINT", line=line)
+            self.statements(handler.body)
+            if handler.name is not None:
+                # CPython unbinds the handler name when the block exits.
+                self.emit("DELETE_NAME", handler.name, line)
+            end_jumps.append(self.emit("JUMP", -1, line))
+            if next_handler is not None:
+                self.patch(next_handler, len(self.code))
+        if not saw_bare:
+            # Nothing matched: the exception is still on the stack.
+            self.emit("RERAISE", line=node.lineno)
+        end = len(self.code)
+        self.patch(normal_jump, end)
+        for jump in end_jumps:
+            self.patch(jump, end)
         self.safe(node)
 
     def assignment(self, target: ast.expr, value: ast.expr, line: int) -> None:

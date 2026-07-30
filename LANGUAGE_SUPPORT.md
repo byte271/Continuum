@@ -57,7 +57,10 @@ fall back to a same-named module global.
 | Bare `raise` / `raise ... from` | explicitly rejected | Cause and active-handler semantics absent |
 | `try/finally` | partially supported | Normal and exceptional pending reasons survive; return/break/continue out of `try` rejected |
 | Checkpoint during pending propagation | supported | Freeze before finally body and resumed propagation tested |
-| `try/except`, multiple handlers, `else` | explicitly rejected | Handler matching and traceback state absent |
+| `try/except`, multiple handlers, `else` | supported | Type and tuple matching, `as` binding unbound at handler exit, bare `except` last; the live exception is an ordinary portable operand |
+| `break`/`continue` out of a protected region | explicitly rejected | Would leave a control block on the frame |
+| `return` out of `try/finally` | explicitly rejected | Returning discards the frame and would skip the finally body |
+| User-defined exception classes, `raise ... from`, exception groups | explicitly rejected | Requires classes and cause/traceback state |
 | Exception raised inside `finally` | untested | Host exception unwinding is likely to replace the pending exception, but no claim is made |
 | Tracebacks | explicitly rejected | Native traceback/frame objects are not portable values |
 

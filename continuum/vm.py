@@ -78,12 +78,31 @@ ALLOWED_MODULE_ATTRS = {
         "uniform",
     },
 }
-ALLOWED_BUILTINS = {
+# Exception types a program may name. Every one is either raisable by an
+# allowlisted operation or a base class of one, so a handler can be written for
+# anything this runtime can actually produce. All live in `builtins`, so the
+# codec can encode an instance by name and rebuild it on any host.
+ALLOWED_EXCEPTIONS = {
+    "ArithmeticError",
     "AssertionError",
+    "AttributeError",
+    "BaseException",
     "Exception",
+    "IndexError",
+    "KeyError",
+    "LookupError",
+    "NameError",
+    "OSError",
+    "OverflowError",
     "RuntimeError",
+    "StopIteration",
     "TypeError",
+    "UnboundLocalError",
     "ValueError",
+    "ZeroDivisionError",
+}
+ALLOWED_BUILTINS = {
+    *ALLOWED_EXCEPTIONS,
     "abs",
     "bool",
     "dict",
@@ -545,6 +564,34 @@ class VirtualMachine:
                 {"kind": "finally", "target": arg, "stack_depth": len(stack)}
             )
             frame.pc += 1
+        elif op == "SETUP_EXCEPT":
+            frame.blocks.append(
+                {"kind": "except", "target": arg, "stack_depth": len(stack)}
+            )
+            frame.pc += 1
+        elif op == "DUP_TOP":
+            self._require_stack(stack, 1, op)
+            stack.append(stack[-1])
+            frame.pc += 1
+        elif op == "MATCH_EXC":
+            # Stack: [..., exception, matcher]. Leaves the exception in place
+            # so an unmatched handler can hand it to the next one.
+            self._require_stack(stack, 2, op)
+            matcher = stack.pop()
+            exception = stack.pop()
+            stack.append(self._exception_matches(exception, matcher))
+            frame.pc += 1
+        elif op == "RERAISE":
+            self._require_stack(stack, 1, op)
+            exception = stack.pop()
+            if not isinstance(exception, BaseException):
+                raise ExecutionError("RERAISE without a live exception")
+            raise exception
+        elif op == "DELETE_NAME":
+            # `except E as name` unbinds `name` when the handler exits, even
+            # if the handler never assigned it again.
+            frame.locals.pop(arg, None)
+            frame.pc += 1
         elif op == "POP_BLOCK":
             if not frame.blocks:
                 raise RuntimeError("POP_BLOCK without block")
@@ -633,19 +680,51 @@ class VirtualMachine:
             return target(*positional, **kwargs)
         raise TypeError(f"object is not callable: {type(callable_value).__name__}")
 
+    @staticmethod
+    def _exception_matches(exception: Any, matcher: Any) -> bool:
+        # A handler names its type through the ordinary portable value path, so
+        # the matcher arrives as a BuiltinRef rather than a host type object.
+        # Resolve it here against the closed exception allowlist; nothing else
+        # is accepted, so an image cannot smuggle in an arbitrary type.
+        raw = matcher if isinstance(matcher, tuple) else (matcher,)
+        candidates = []
+        for candidate in raw:
+            if isinstance(candidate, BuiltinRef):
+                if candidate.name not in ALLOWED_EXCEPTIONS:
+                    raise TypeError(
+                        "catching classes that do not inherit from "
+                        "BaseException is not allowed"
+                    )
+                candidates.append(getattr(builtins, candidate.name))
+                continue
+            raise TypeError(
+                "catching classes that do not inherit from BaseException "
+                "is not allowed"
+            )
+        return isinstance(exception, tuple(candidates))
+
     def _handle_exception(self, exception: BaseException) -> bool:
         while self.frames:
             frame = self.frames[-1]
             if frame.blocks:
                 block = frame.blocks.pop()
-                if block["kind"] != "finally":
-                    raise ExecutionError(f"unknown control block: {block['kind']}")
-                del frame.stack[block["stack_depth"] :]
-                frame.finally_reasons.append(
-                    {"kind": "exception", "exception": exception}
-                )
-                frame.pc = block["target"]
-                return True
+                kind = block["kind"]
+                if kind == "finally":
+                    del frame.stack[block["stack_depth"] :]
+                    frame.finally_reasons.append(
+                        {"kind": "exception", "exception": exception}
+                    )
+                    frame.pc = block["target"]
+                    return True
+                if kind == "except":
+                    # The handler receives the live exception as an ordinary
+                    # operand-stack value, so a checkpoint taken anywhere
+                    # inside the handler serializes it like any other value.
+                    del frame.stack[block["stack_depth"] :]
+                    frame.stack.append(exception)
+                    frame.pc = block["target"]
+                    return True
+                raise ExecutionError(f"unknown control block: {kind}")
             self.frames.pop()
         return False
 
@@ -664,6 +743,54 @@ class VirtualMachine:
                 raise ImageError(f"invalid PC in frame {frame.function_id}")
             if not isinstance(frame.locals, dict) or not isinstance(frame.stack, list):
                 raise ImageError(f"invalid frame state: {frame.function_id}")
+            self._validate_frame_control(frame, definition)
+
+    @staticmethod
+    def _validate_frame_control(
+        frame: "Frame", definition: dict[str, Any]
+    ) -> None:
+        # Control blocks decide where a later exception resumes, so a restored
+        # image must be checked here rather than when an exception happens to
+        # unwind into one.
+        if not isinstance(frame.blocks, list) or not isinstance(
+            frame.finally_reasons, list
+        ):
+            raise ImageError(f"invalid control state: {frame.function_id}")
+        for block in frame.blocks:
+            if not isinstance(block, dict):
+                raise ImageError(f"invalid control block: {frame.function_id}")
+            if block.get("kind") not in CONTROL_BLOCK_KINDS:
+                raise ImageError(
+                    f"unknown control block: {block.get('kind')!r}"
+                )
+            target = block.get("target")
+            if not isinstance(target, int) or not 0 <= target < len(
+                definition["code"]
+            ):
+                raise ImageError(
+                    f"control block target outside {frame.function_id}"
+                )
+            depth = block.get("stack_depth")
+            if not isinstance(depth, int) or not 0 <= depth <= len(frame.stack):
+                raise ImageError(
+                    f"control block stack depth is invalid in "
+                    f"{frame.function_id}"
+                )
+        for reason in frame.finally_reasons:
+            if not isinstance(reason, dict) or reason.get("kind") not in {
+                "normal",
+                "exception",
+            }:
+                raise ImageError(
+                    f"unknown finally reason in {frame.function_id}"
+                )
+            if reason["kind"] == "exception" and not isinstance(
+                reason.get("exception"), BaseException
+            ):
+                raise ImageError(
+                    f"finally reason carries no exception in "
+                    f"{frame.function_id}"
+                )
 
     @staticmethod
     def _constant(spec: dict[str, Any]) -> Any:
@@ -709,6 +836,8 @@ VALID_OPS = {
     "CALL",
     "COMPARE",
     "CONST",
+    "DELETE_NAME",
+    "DUP_TOP",
     "END_FINALLY",
     "ENTER_FINALLY_NORMAL",
     "FORMAT_VALUE",
@@ -723,23 +852,28 @@ VALID_OPS = {
     "LOAD_NAME",
     "LOAD_SUBSCR",
     "MAKE_FUNCTION",
+    "MATCH_EXC",
     "POP_BLOCK",
     "POP_TOP",
     "RAISE",
+    "RERAISE",
     "RETURN",
     "SAFEPOINT",
+    "SETUP_EXCEPT",
     "SETUP_FINALLY",
     "STORE_NAME",
     "STORE_SUBSCR_VALUE_FIRST",
     "UNARY",
     "UNPACK",
 }
+CONTROL_BLOCK_KINDS = {"except", "finally"}
 JUMP_OPS = {
     "FOR_ITER",
     "JUMP",
     "JUMP_IF_FALSE",
     "JUMP_IF_FALSE_OR_POP",
     "JUMP_IF_TRUE_OR_POP",
+    "SETUP_EXCEPT",
     "SETUP_FINALLY",
 }
 

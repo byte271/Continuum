@@ -102,9 +102,25 @@ for key in mapping:
             "generator expression": "values = tuple(x for x in range(3))\n",
             "generator function": "def values():\n    yield 1\n",
             "context manager": "with open('x') as handle:\n    value = handle.read()\n",
-            "try except": (
+            "break out of try": (
+                "for i in range(3):\n"
+                "    try:\n"
+                "        break\n"
+                "    except ValueError:\n"
+                "        pass\n"
+            ),
+            "return out of try/finally": (
+                "def f():\n"
+                "    try:\n"
+                "        return 1\n"
+                "    finally:\n"
+                "        pass\n"
+            ),
+            "except after bare except": (
                 "try:\n"
-                "    raise ValueError('x')\n"
+                "    pass\n"
+                "except:\n"
+                "    pass\n"
                 "except ValueError:\n"
                 "    pass\n"
             ),
