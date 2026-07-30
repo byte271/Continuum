@@ -1,10 +1,15 @@
 # Continuum
 
-[![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/runs/30489463484)
+[![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml)
+[![Runtime bundles](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Continuum pauses a supported Python program on Linux x86_64 and resumes the
 same live execution state in a new process on Apple Silicon macOS arm64.
+
+Continuum runs natively on Linux x86_64, Apple Silicon macOS arm64, and
+Windows x86_64. Continuation between two different platforms is verified for
+exactly one direction: Linux x86_64 to Apple Silicon macOS arm64.
 
 Continuum currently compiles a controlled pure-Python subset into a portable
 explicit-stack runtime. It does not migrate arbitrary CPython processes or
@@ -12,7 +17,7 @@ native machine state.
 
 ```console
 $ python3 -m continuum doctor
-$ python3 -m continuum demo --output /tmp/continuum-demo
+$ python3 -m continuum demo --output-dir /tmp/continuum-demo
 Same-machine continuation demonstration
 ...
 Combined output matches uninterrupted control: yes
@@ -43,10 +48,39 @@ files. Classes, closures, generators, native extensions, subprocesses,
 sockets, writable files, and arbitrary CPython frames are unsupported.
 
 That proof is immutable evidence for Continuum IR 0.2 at the commit above.
-Current development uses IR 0.3 and runtime 0.2.0.dev0; its same-machine tests
-pass, but the Linux-to-macOS proof has not yet been rerun for that newer image
-format capability. The verified baseline is not being generalized to the
-development revision.
+
+The same two-job workflow has since been rerun for current IR 0.3 and runtime
+0.2.0a1. Its `linux-source` and dependent `macos-target` jobs passed at commit
+[`3a4a43fb74331113225d7b9a3a0fef4afd1371fa`](https://github.com/byte271/Continuum/commit/3a4a43fb74331113225d7b9a3a0fef4afd1371fa)
+in [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641).
+The workflow runs on every push to `main`, so the badge above reports the
+current state of that one direction.
+
+Cross-platform evidence covers native Linux x86_64 to native Apple Silicon
+macOS arm64 and nothing else. No cross-platform path involving Windows has
+been run in either direction.
+
+## Native platform support
+
+[`runtime-bundles.yml`](.github/workflows/runtime-bundles.yml) builds exact
+CPython 3.12.13 from source on each host, then runs the complete test suite,
+the transactional installer, and `continuum doctor` against the moved bundle:
+
+| Host | Runner | Same-host continuation |
+| --- | --- | --- |
+| Linux x86_64 | `ubuntu-24.04` | CI-verified |
+| Apple Silicon macOS arm64 | `macos-26` | CI-verified |
+| Windows x86_64 | `windows-2025` | CI-verified |
+
+Same-host continuation means checkpoint, source-process exit, and resume in a
+new process on the same machine. The Windows job additionally runs the
+`continuum demo` continuation end to end against its moved bundle.
+
+Windows arm64 is unsupported; images reject it. The published 50-program
+compatibility corpus report is a Linux x86_64 measurement and has not been
+regenerated on Windows or macOS. Native support on a host is not evidence that
+an image moves between hosts; see [PORTABILITY.md](PORTABILITY.md) for the
+tested pairs.
 
 ## Why this is a real continuation
 
@@ -74,7 +108,7 @@ the stage-by-stage hostile audit is [AUDIT.md](AUDIT.md).
 ## Requirements
 
 - CPython 3.12.13 exactly;
-- Linux or macOS;
+- Linux x86_64, Apple Silicon macOS arm64, or Windows x86_64;
 - one thread;
 - only the standard library is needed.
 
@@ -86,8 +120,17 @@ From a checkout of the repository:
 
 ```bash
 python3 -m continuum doctor
-python3 -m continuum demo --output /tmp/continuum-demo
+python3 -m continuum demo --output-dir /tmp/continuum-demo
 ```
+
+On Windows, use `python` and a Windows path:
+
+```powershell
+python -m continuum doctor
+python -m continuum demo --output-dir $env:TEMP\continuum-demo
+```
+
+An installed Windows bundle exposes the same CLI as `continuum.cmd`.
 
 The demo automatically launches an unchanged nested-call workload, freezes a
 live continuation, deletes the original bundled input, resumes in a new
@@ -117,6 +160,12 @@ python3 -m continuum verify process.cont
 python3 -m continuum resume process.cont
 ```
 
+A freeze request is published atomically as a control file. On POSIX hosts the
+running session is then notified with `SIGUSR1`, so idle safe points touch no
+filesystem. Windows has no `SIGUSR1`: the session instead polls for the request
+file at safe points, at most once every 10 ms. The freeze protocol and image
+are identical; only the notification path and its idle cost differ.
+
 `inspect` validates the container and prints metadata. `verify` additionally
 decodes the allowlisted graph and reconstructs frame state without opening
 resources, compiling bundled source, or starting execution. Neither command
@@ -133,13 +182,20 @@ python3 -m continuum resume process.cont \
 ```
 
 Relocation still verifies size and SHA-256. It never silently accepts a
-different file.
+different file. `OLD` must be an absolute POSIX or Windows path exactly as the
+source host recorded it; `NEW` is resolved on the current host.
 
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
+
+The suite discovers 89 tests and is run natively on Linux x86_64, Apple
+Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
+mechanism does not exist on the current host skip explicitly: POSIX signal
+notification and the shell installer skip on Windows, and the native Apple
+Silicon test skips everywhere else.
 
 The adversarial process test routes source and target actions through a
 separate fsyncing auditor, waits for the source PID to exit, starts a new
@@ -160,12 +216,19 @@ described in [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Installation status
 
-The repository contains a self-contained bundle builder and bootstrap
-installer under `packaging/`. A Linux x86_64 bundle containing exact CPython
-3.12.13 has been built, moved, installed into a fresh prefix, checked with
-`continuum doctor`, and used for a real run locally. The macOS arm64 bundle
-workflow and public release download have not yet been verified, so this
-README does not publish a one-line network installer command.
+The repository contains self-contained bundle builders and bootstrap
+installers under `packaging/`. Linux x86_64 and macOS arm64 build
+`.tar.gz` archives through `build_bundle.sh` and install with `install.sh`;
+Windows x86_64 builds a `.zip` through `build_bundle_windows.ps1` and installs
+with `install.ps1`.
+
+All three bundles are built, moved, extracted, exercised with the complete
+test suite, installed into a fresh prefix, and checked with `continuum doctor`
+on every push to `main` by `runtime-bundles.yml`.
+
+No published release download or one-line network installer exists yet, so
+this README does not publish an installer command. Bundles are currently
+retained only as workflow artifacts.
 
 ## Repository map
 
@@ -175,7 +238,10 @@ README does not publish a one-line network installer command.
 - `continuum/resources.py` — strict, relocate, and bundle file rebinding.
 - `continuum/image.py` — atomic `.cont` writer, reader, and integrity checks.
 - `continuum/session.py` — session records and atomic freeze control files.
-- `packaging/` — relocatable exact-runtime bundles and transactional installer.
+- `packaging/` — relocatable exact-runtime bundles and transactional
+  installers; `build_bundle.sh`/`install.sh` for POSIX hosts and
+  `build_bundle_windows.ps1`/`install.ps1` for Windows.
+- `validation/windows/build_cpython.ps1` — native Windows exact-CPython build.
 - `compatibility/` — unchanged 50-program CPython differential corpus.
 - `docs/adr/0001-portable-explicit-stack-vm.md` — architecture decision.
 - `FORMAT.md`, `SECURITY.md`, `LIMITATIONS.md`, `STATUS.md` — exact contracts.

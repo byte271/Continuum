@@ -1,6 +1,6 @@
 # Status
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 
 ## WORKING
 
@@ -9,7 +9,16 @@ Updated: 2026-07-29
   Actions run
   [30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
   passed 26/26 proof conditions at commit
-  `15bceefece050d06a1f504244a77434e31fd5228`.
+  `15bceefece050d06a1f504244a77434e31fd5228` for IR 0.2/runtime 0.1.1.dev0.
+  The same two jobs passed for current IR 0.3/runtime 0.2.0a1 in Actions run
+  [30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
+  at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`. This is the only
+  verified cross-platform direction.
+- Native same-host continuation on Linux x86_64, Apple Silicon macOS arm64,
+  and Windows x86_64. `runtime-bundles.yml` builds exact CPython 3.12.13 from
+  source on each host and runs the complete suite, the installer, and
+  `continuum doctor` against the moved bundle; the Windows job also runs a
+  complete `continuum demo` continuation.
 - The verified source process exited and was reaped before a new target
   process resumed the unchanged image. Source/transfer/target image hashes
   were identical; source-plus-target output and the final result hash matched
@@ -19,8 +28,8 @@ Updated: 2026-07-29
   and supported `try/finally` control state.
 - Positional default arguments with definition-time evaluation, mutable
   identity across calls, keyword binding, and checkpoint restoration.
-- Same-host Linux x86_64 checkpoint, atomic image commit, source-process exit,
-  and resume in a new process without source replay.
+- Same-host checkpoint, atomic image commit, source-process exit, and resume
+  in a new process without source replay, on each of the three native hosts.
 - External-auditor anti-restart proof for entry execution, three function
   prologues, completed loop actions, ordered source-exit/target-start process
   events, and final control hash.
@@ -35,17 +44,27 @@ Updated: 2026-07-29
   rejection.
 - Failed checkpoint leaves source state live and permits a later successful
   retry.
-- Signal-assisted freeze notification. Idle safe points poll an in-memory
-  Boolean; the request document is published atomically before `SIGUSR1`.
+- Signal-assisted freeze notification on POSIX hosts. Idle safe points read an
+  in-memory Boolean; the request document is published atomically before
+  `SIGUSR1`.
+- Freeze notification on Windows, which has no `SIGUSR1`. The request document
+  is published by the same atomic hard link, and safe points poll for it at
+  most once every 10 ms. `continuum freeze` confirms the target process is
+  alive through `OpenProcess`/`GetExitCodeProcess` instead of `kill(pid, 0)`.
+  The protocol and the resulting image are unchanged; idle cost and freeze
+  latency are not measured on Windows.
 - Public `run`, `sessions`, `freeze`, `inspect`, `verify`, `resume`, `doctor`,
   `demo`, and `--version`.
 - `verify` validates compatibility, decodes the allowlisted graph, and
   reconstructs frames without opening resources or starting execution.
 - A 50-program unchanged-source differential corpus. Current IR 0.3 passes
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
-  arguments.
-- Current full suite: 79 tests discovered, 78 passed, one native Apple Silicon
-  test skipped on this Linux x86_64 host.
+  arguments. That rate is a Linux x86_64 measurement; the suite exercises two
+  corpus programs through all four gates on every host.
+- Current full suite: 89 tests discovered. Tests skip only where the host
+  lacks the mechanism under test: the native Apple Silicon test skips off
+  macOS arm64, and POSIX signal notification, the shell installer, and the
+  symlink launcher skip on Windows.
 
 ## PARTIALLY WORKING
 
@@ -63,9 +82,12 @@ Updated: 2026-07-29
   retry, corruption, truncation, and compatibility—not every commit stage.
 - Performance remains about 159× slower than the native control without
   safe-point notification on the audited workload.
-- Self-contained runtime bundles have a builder and transactional installer.
-  Linux x86_64 was exercised locally with exact CPython 3.12.13; the macOS
-  arm64 bundle job and public download path remain unverified.
+- Self-contained runtime bundles have builders and transactional installers
+  for all three hosts: `.tar.gz` through `build_bundle.sh`/`install.sh` on
+  POSIX, `.zip` through `build_bundle_windows.ps1`/`install.ps1` on Windows.
+  All three are built, moved, installed, and checked in CI. No public release
+  download or one-line installer exists, so the published download path
+  remains unverified.
 
 ## NOT WORKING
 
@@ -82,13 +104,19 @@ Updated: 2026-07-29
 
 ## UNVERIFIED
 
-- Cross-platform restoration for current IR 0.3/runtime 0.2.0.dev0. The
-  immutable verified proof is for IR 0.2 at commit
-  `15bceefece050d06a1f504244a77434e31fd5228`; a new image and full proof run
-  are required after the development revision is published.
-- Resume in a second native Linux x86_64 environment or after an actual reboot.
-- Native macOS resource behavior and directory durability.
+- Any cross-platform path involving Windows, in either direction. The
+  cross-platform proof workflow has exactly two jobs, `linux-source` and
+  `macos-target`, and `validation/cross_platform/` contains no Windows source
+  or target script. Windows images and Windows resumes have never been moved
+  between hosts.
 - Any source/target platform pair other than the verified GitHub-hosted Linux
   x86_64 to Apple Silicon macOS arm64 pair.
+- Windows arm64, which is not an accepted image target pair at all.
+- Resume in a second native Linux x86_64 environment or after an actual reboot.
+- Native macOS and Windows resource behavior and directory durability.
+- Windows idle safe-point and freeze-latency cost. `PERFORMANCE.md` contains
+  Linux x86_64 measurements only.
+- The 50-program corpus on Windows or macOS.
 - Cross-platform restoration for programs or resources outside the exact
   verified controlled subset.
+- Any published release download or one-line installer.

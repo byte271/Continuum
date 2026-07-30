@@ -8,9 +8,15 @@ The historical untouched-baseline note below describes the original imported
 workspace, not the current repository identity.
 
 That immutable proof used IR 0.2/runtime 0.1.1.dev0. Current development uses
-IR 0.3/runtime 0.2.0.dev0 after adding positional default arguments. Its
-same-machine audit passes; cross-platform restoration of a newly written IR
-0.3 image remains unverified pending a fresh two-job proof run.
+IR 0.3/runtime 0.2.0a1 after adding positional default arguments. Its
+same-machine audit passes, and a freshly written IR 0.3 image completed the
+same two-job Linux-to-macOS proof in
+[Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
+at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`.
+
+This audit was performed on Linux x86_64 and has not been repeated on macOS or
+Windows. Windows x86_64 became a natively supported host after this audit; its
+same-host behavior is covered by CI, not by the manual audit below.
 
 ## Untouched baseline
 
@@ -36,7 +42,7 @@ consecutive runs after the fix.
 | Source to AST | Source bytes and SHA-256 | CPython AST | Parsing | Unsupported nodes fail compilation |
 | AST to IR | Logical operations, branches, function IDs, source lines, static local names | Instruction dictionaries | Compilation | This is lowering, not CPython bytecode/frame capture |
 | Runtime | Frames, PCs, locals, operand stacks, block/finally records, globals | Decoded instruction cache | Host builtin/method results when originally called | Host calls are atomic; native live values can block freeze |
-| Freeze request | Session/token/output request | Control-file paths and prior signal handler | Signal delivery and response waiting | Same-host POSIX signal/filesystem control only |
+| Freeze request | Session/token/output request | Control-file paths and, on POSIX, the prior signal handler | Notification delivery and response waiting | Same-host filesystem control only; `SIGUSR1` on POSIX, safe-point request-file polling on Windows |
 | Graph capture | Reachable supported object graph, identity, cycles, RNG and resource references | Tagged graph document | Canonical set order key | Unsupported live values fail before destination creation |
 | Resource capture | File mode/options, identity, offset, optional bytes | Metadata records | SHA-256 and bundled byte read | Read-only regular files only; bundle capture detects content change |
 | Image commit | IR, source, graph, frames, resources, metadata | ZIP container/checksums | Hashes and compression | Directory fsync failure is currently ignored |
@@ -105,14 +111,32 @@ a partially evaluated expression while a nested Continuum callee is frozen.
 
 There is no checkpoint inside a host builtin, method, module call, file read,
 or individual arithmetic opcode. A request at those points is delayed.
-An atomically published request sends `SIGUSR1`; the handler only sets an
-in-memory Boolean. Idle safe points therefore do not access the filesystem,
-and the next safe point consumes the already published request.
+
+On POSIX hosts an atomically published request sends `SIGUSR1`; the handler
+only sets an in-memory Boolean. Idle safe points therefore do not access the
+filesystem, and the next safe point consumes the already published request.
+
+Windows has no `SIGUSR1`. The request is published by the same atomic
+hard link, and safe points test for its existence at most once every 10 ms,
+which reinstates a bounded filesystem lookup on the idle path for that host
+only. The checkpoint boundary, the request document, and the resulting image
+are identical.
 
 ## Remaining high-risk gaps
 
 - Only one native cross-platform pair and one proof workload have been
   verified. Broader program and resource portability remains unmeasured.
+- No cross-platform path involving Windows has been exercised in either
+  direction. Windows is a natively supported host with same-host CI evidence
+  only.
+- The `0600`/`0700` modes requested for session control files and directories
+  are enforced by the OS on POSIX hosts only. On Windows `os.chmod` reaches
+  the read-only attribute alone, so those requests are not an access-control
+  boundary there.
+- Freeze request publication requires a same-directory hard link, so a
+  `CONTINUUM_HOME` on a filesystem without hard links cannot accept a freeze
+  request at all. NTFS supports it; FAT32/exFAT and some network shares do
+  not.
 - Failure injection does not yet cover every ZIP write, fsync, checksum write,
   and rename boundary.
 - `inspect` validates hashes and document schemas but does not fully decode

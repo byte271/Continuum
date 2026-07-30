@@ -22,7 +22,8 @@ not make it safe to run.
   and frame state without opening resources or dispatching program execution;
 - read-only regular-file resources only;
 - strict content verification for host-file rebinding;
-- 0600 session control records inside 0700 directories;
+- session control records created with mode `0600` inside directories created
+  with mode `0700`, enforced by the OS on POSIX hosts only;
 - atomic image and session-state replacement.
 
 ## Remaining risks
@@ -58,6 +59,28 @@ installation can still substitute those modules.
 
 Bundled bytes are read directly from their ZIP members and never extracted.
 They may contain secrets. Anyone with the image can read them.
+
+### Windows permission semantics
+
+The runtime requests `0600` for session records and freeze control files and
+`0700` for the directories under `CONTINUUM_HOME`. Those requests are POSIX
+mode bits. On Windows, `os.chmod` only clears or sets the read-only attribute
+and `os.open` mode bits are not an ACL, so the requested modes are not an
+access-control guarantee. Access is instead governed by the inherited NTFS
+ACLs of the containing directory, which for the default
+`%USERPROFILE%\.continuum` normally restrict the user's profile but are not
+verified by Continuum.
+
+A session record and its freeze control files contain the session control
+token and the image output path. Anyone who can read them can request a
+checkpoint of that session, and anyone who can write the request path can
+choose where the image is written. On Windows, treat `CONTINUUM_HOME` as
+protected only to the degree its parent directory's ACLs already protect it,
+and do not place it on a world-readable or removable volume. Continuum does
+not audit or repair those ACLs.
+
+This applies to session control only. Image integrity, the allowlists, and
+every other control above are filesystem-independent.
 
 ### Secrets and environment
 

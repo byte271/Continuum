@@ -68,7 +68,22 @@ Write modes, mmap, pipes, devices, sockets, and directory handles are rejected.
 Images intentionally contain JSON, source, bundled data, and ZIP metadata—no
 native code or pointers. Native Linux x86_64 to Apple Silicon macOS arm64
 continuation was verified for the controlled proof workload in
-[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484).
+[Actions run 30489463484](https://github.com/byte271/Continuum/actions/runs/30489463484)
+for IR 0.2, and again for current IR 0.3/runtime 0.2.0a1 in
+[Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641).
 That single platform pair and workload do not establish portability for other
 programs, resources, operating systems, architectures, or Python versions.
+
+Continuum runs natively on Linux x86_64, Apple Silicon macOS arm64, and
+Windows x86_64, and same-host continuation is CI-verified on each. Running
+natively on a host says nothing about moving an image to or from it. No
+cross-platform path involving Windows has been run in either direction, and
+no cross-host test has exercised a text-mode resource between hosts whose
+native line endings differ. Windows arm64 is unsupported and images reject it.
+
+The published 50-program compatibility corpus report was measured on Linux
+x86_64 only. The test suite exercises two corpus programs through all four
+gates on every host, so the full corpus rate is not a Windows or macOS
+measurement.
+
 See [STATUS.md](STATUS.md) and [PORTABILITY.md](PORTABILITY.md).

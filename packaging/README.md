@@ -6,6 +6,7 @@ a platform archive containing its own interpreter:
 ```text
 continuum-linux-x86_64/
 continuum-macos-arm64/
+continuum-windows-x86_64/
 ```
 
 Each bundle contains the Continuum CLI, the exact CPython runtime, a runtime
@@ -14,10 +15,17 @@ evidence, the demonstration source, the license, and installation
 documentation. The launcher sets `PYTHONHOME` and `PYTHONPATH` to the bundle
 before starting its private interpreter.
 
+Every build verifies the bundle before archiving it: `--version`,
+`doctor --json` retained as `doctor-build-check.json`, and a real program run
+through the launcher.
+
+## POSIX hosts
+
 Build a bundle in an empty output directory:
 
 ```bash
 packaging/build_bundle.sh linux-x86_64 /absolute/output
+packaging/build_bundle.sh macos-arm64 /absolute/output
 ```
 
 The build downloads the official CPython 3.12.13 source archive, verifies the
@@ -33,10 +41,56 @@ packaging/install.sh \
   --sha256 <64-lowercase-hex-digest>
 ```
 
-The installer requires the expected digest, refuses HTTP, validates every
-archive path, refuses to overwrite an existing installation, and runs
-`continuum doctor` before moving the bundle into place.
+## Windows x86_64
+
+The Windows bundle is a `.zip`, not a `.tar.gz`, and the scripts are
+PowerShell. Build it in a new output parent directory:
+
+```powershell
+.\packaging\build_bundle_windows.ps1 -OutputParent C:\absolute\output
+```
+
+`build_bundle_windows.ps1` calls `validation\windows\build_cpython.ps1`, which
+downloads the same pinned official CPython 3.12.13 source archive, verifies the
+same SHA-256, and builds it natively with MSBuild against the installed
+platform toolset. The build refuses to continue unless the host reports Windows
+x86_64 and the built interpreter reports exactly 3.12.13. It produces
+`continuum-windows-x86_64.zip`, a `.sha256` sidecar, and a
+`continuum-windows-x86_64-build-evidence` directory.
+
+Install a verified local or HTTPS archive:
+
+```powershell
+.\packaging\install.ps1 `
+  -Archive C:\path\to\continuum-windows-x86_64.zip `
+  -Sha256 <64-lowercase-hex-digest>
+```
+
+`-Prefix` defaults to `%LOCALAPPDATA%\Continuum`. The installed command is
+`<prefix>\bin\continuum.cmd`, a launcher that forwards to
+`<prefix>\lib\continuum-windows-x86_64\bin\continuum.cmd`; POSIX prefixes use a
+symlinked `bin/continuum` instead.
+
+## Installer guarantees
+
+Both installers require the expected digest, refuse HTTP, validate every
+archive path, refuse to overwrite an existing installation, and run
+`continuum doctor` before moving the bundle into place. `install.ps1`
+additionally rejects duplicate archive members under Windows case-insensitive
+comparison, reserved Windows device names, members whose Windows-normalized
+form differs from the stored name, and any symbolic-link member.
+
+## Verification status
+
+`.github/workflows/runtime-bundles.yml` runs all three builds on every push to
+`main`. Each job builds the bundle, verifies the moved archive against its
+sidecar digest, extracts it, runs `continuum doctor`, runs the complete test
+suite against the bundled interpreter, installs into a fresh prefix, and runs
+`continuum doctor` again from the installed prefix. The Windows job also runs a
+complete `continuum demo` continuation against the moved bundle.
+
+That is evidence of a working native installation on each host. It is not
+evidence that an image moves between hosts; see `PORTABILITY.md`.
 
 Published one-line download commands must not be added to the main README
-until both platform archives have passed clean-runner CI and immutable release
-URLs and hashes exist.
+until all three platform archives have immutable release URLs and hashes.

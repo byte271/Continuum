@@ -3,6 +3,9 @@
 Correctness remains the priority. These are raw local measurements from one
 Linux x86_64 environment, not portable targets.
 
+Every number on this page is Linux x86_64. Nothing here was measured on macOS
+arm64 or Windows x86_64, and no number should be quoted for those hosts.
+
 ## Audited measurement
 
 Command:
@@ -74,6 +77,14 @@ no-callback VM run fell from 78.1% to 6.8%. The underlying VM median did not
 materially change. The apparently worse VM/native ratio in the second run
 comes from its lower 0.000891-second native-control median, not a slower VM.
 All raw samples are retained in the two JSON files.
+
+That improvement is specific to hosts with `SIGUSR1`. Windows has no
+`SIGUSR1`, so its sessions keep a bounded request-path lookup on the idle safe
+point, capped at one lookup per 10 ms. Structurally that is the
+path-polling column above with a rate limit, but it has not been measured:
+there is no Windows benchmark run, and the polling-baseline numbers here must
+not be reused as a Windows estimate. Measuring it is a milestone in
+`ROADMAP.md`.
 
 ## Why the prior 590× number was invalid
 

@@ -21,9 +21,15 @@ Windows CRLF from being misclassified as a language-semantic difference.
 Failures remain in the denominator. Cross-platform status remains `not_run`
 until these exact programs are exercised by the native proof workflow.
 
+The runner is host-independent and the line-ending handling above lets it run
+unchanged on Windows, but the published report below has only ever been
+generated on Linux x86_64. The test suite runs two corpus programs through all
+four gates on every host, which is a smoke check of the runner, not a
+compatibility measurement for that host.
+
 ## Measured results
 
-Measured on 2026-07-29 with CPython 3.12.13:
+Measured on 2026-07-29 with CPython 3.12.13 on Linux x86_64:
 
 | Gate | Initial IR 0.2 | After positional defaults, IR 0.3 |
 | --- | ---: | ---: |
@@ -34,6 +40,8 @@ Measured on 2026-07-29 with CPython 3.12.13:
 | New-process checkpoint/resume matched CPython | 32 | 35 |
 | Full compatibility rate | **64.0%** | **70.0%** |
 | Cross-platform corpus validation | not run | not run |
+| Corpus regenerated on macOS arm64 | not run | not run |
+| Corpus regenerated on Windows x86_64 | not run | not run |
 
 Raw per-program results and timings are in
 `compatibility/results/baseline-2026-07-29.json`; the generated table is in

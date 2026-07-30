@@ -133,13 +133,25 @@ The current writer requires:
 
 - image format 0.1;
 - IR 0.3;
-- Continuum runtime 0.2.0.dev0;
+- Continuum runtime 0.2.0a1;
 - CPython 3.12.13;
-- target OS Linux or Darwin;
+- target OS Linux, Darwin, or Windows;
 - target architecture x86_64 or arm64;
+- a target `(OS, architecture)` pair listed in
+  `target_compatibility.platforms`;
 - `native_payload_required: false`;
 - only the mandatory capabilities implemented by this runtime.
 
-Matching these declarations is necessary but not proof that every host library
-has identical semantics. Only allowlisted standard-library modules are
-callable.
+`target_compatibility.platforms` currently lists Linux x86_64, Linux arm64,
+Darwin x86_64, Darwin arm64, and Windows x86_64. Windows arm64 is absent and
+is rejected on the pair check.
+
+These declarations describe what a reader will attempt to restore. They are
+not evidence that the pair has been exercised: see
+[PORTABILITY.md](PORTABILITY.md) for the combinations that have actually run.
+Matching them is also not proof that every host library has identical
+semantics. Only allowlisted standard-library modules are callable.
+
+Archive member names stay POSIX-relative on every host, including Windows.
+The absolute paths stored inside `resources/resources.json` are host-form
+data, not archive paths, and are never used to open an entry.
