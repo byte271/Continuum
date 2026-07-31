@@ -348,3 +348,69 @@ class ContractShapeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlatformDoubleGateTests(unittest.TestCase):
+    """The platform pair is decided by the image and the runtime, not either alone.
+
+    Before this gate existed the pair was checked only against the image's own
+    lists, so an image that named Windows arm64 was accepted on a Windows arm64
+    host even though this runtime never accepted that pair. The untrusted
+    document decided its own admissibility.
+    """
+
+    def widened(self) -> dict:
+        """A contract that claims Windows arm64 for itself."""
+        document = contract()
+        target = document["target"]
+        target["operating_systems"] = ["Linux", "Darwin", "Windows"]
+        target["architectures"] = ["x86_64", "arm64"]
+        target["platforms"] = target["platforms"] + [
+            {"os": "Windows", "architecture": "arm64"}
+        ]
+        return document
+
+    def test_the_runtime_refuses_a_pair_it_does_not_accept(self):
+        with self.assertRaises(IncompatibleImage) as caught:
+            abi.decide_restore(self.widened(), Host("3.12.13", "Windows", "arm64"))
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+        self.assertIn("this runtime does not accept platform", str(caught.exception))
+
+    def test_the_image_still_refuses_a_pair_it_does_not_list(self):
+        """The image-side half of the gate must remain in force."""
+        document = contract()
+        document["target"]["platforms"] = [
+            entry
+            for entry in document["target"]["platforms"]
+            if entry != {"os": "Darwin", "architecture": "arm64"}
+        ]
+        with self.assertRaises(IncompatibleImage) as caught:
+            abi.decide_restore(document, MACOS_313)
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+        self.assertIn("image does not accept platform", str(caught.exception))
+
+    def test_a_restricted_runtime_refuses_a_pair_the_image_allows(self):
+        """Narrowing the runtime's own list is enough to refuse, by itself."""
+        host = Host(
+            "3.12.13", "Darwin", "arm64", verified_platforms=(("Linux", "x86_64"),)
+        )
+        with self.assertRaises(IncompatibleImage) as caught:
+            abi.decide_restore(contract(), host)
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+
+    def test_every_runtime_accepted_pair_is_still_accepted(self):
+        for name, machine in abi.VERIFIED_PLATFORMS:
+            with self.subTest(platform=f"{name} {machine}"):
+                abi.decide_restore(contract(), Host("3.12.13", name, machine))
+
+    def test_the_runtime_list_matches_the_declared_target_platforms(self):
+        self.assertEqual(
+            sorted(abi.VERIFIED_PLATFORMS),
+            sorted(
+                (entry["os"], entry["architecture"]) for entry in abi.TARGET_PLATFORMS
+            ),
+        )
+
+    def test_windows_arm64_is_absent_from_the_runtime_list(self):
+        """The pair the project has always documented as unsupported."""
+        self.assertNotIn(("Windows", "arm64"), abi.VERIFIED_PLATFORMS)

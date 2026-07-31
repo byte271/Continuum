@@ -128,7 +128,9 @@ explicit execution ABI plus an exact interpreter allowlist, not by matching the
 creator's interpreter. What is **not** claimed: arbitrary Python versions,
 arbitrary process migration, or native CPython frame migration.
 
-That proof is immutable evidence for Continuum IR 0.2 at the commit above.
+The cross-platform proof described two sections above — run 30489463484 at
+commit `15bceef` — is immutable evidence for Continuum IR 0.2 at that commit.
+It is a separate result from the cross-Python proof at `40cc9dd`.
 
 The same two-job workflow was rerun for IR 0.3 at runtime `0.2.0a1`: its
 `linux-source` and dependent `macos-target` jobs passed at commit
@@ -274,7 +276,7 @@ source host recorded it; `NEW` is resolved on the current host.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 302 tests and is run natively on Linux x86_64, Apple
+The suite discovers 313 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

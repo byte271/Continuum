@@ -26,10 +26,17 @@ required capabilities   named features the target must implement
 ======================  ===============================================
 
 A target may restore an image only when it implements the exact execution ABI
-and every required capability, and only when the running interpreter appears in
-both the image's allowlist and this runtime's independently verified list. An
-image cannot widen that set by asserting a version this runtime has never
-verified, and an unverified interpreter is refused rather than attempted.
+and every required capability, and only when the running interpreter *and* the
+running platform pair each appear in both the image's allowlist and this
+runtime's own accepted list.
+
+Both of those decisions are deliberately two-sided. An image declares what its
+creator was willing to target; the runtime declares what it accepts. Requiring
+agreement means an image cannot widen either set by asserting an entry the
+runtime does not accept -- not a Python version nobody verified, and not a
+platform pair such as Windows arm64 -- even when every archive checksum has been
+recomputed to match. A single-sided check would let the untrusted document
+decide its own admissibility.
 
 Every refusal carries a stable machine-readable reason code so that policy is
 testable without string matching.
@@ -102,6 +109,14 @@ TARGET_PLATFORMS = (
     {"os": "Darwin", "architecture": "arm64"},
     {"os": "Windows", "architecture": "x86_64"},
 )
+# The same pairs as an order-independent set, for the runtime side of the
+# platform decision. An image declares which platforms *its creator* was willing
+# to target; this is which platforms *this runtime* accepts. Both must contain
+# the running pair, exactly as with Python versions, so an image cannot widen
+# the platform set by listing a pair this runtime does not accept.
+VERIFIED_PLATFORMS = tuple(
+    (entry["os"], entry["architecture"]) for entry in TARGET_PLATFORMS
+)
 
 # Bounds for parsing untrusted contract documents. An image is executable
 # untrusted content, so every list it declares is length-bounded and every
@@ -166,6 +181,10 @@ class Host:
     continuum_version: str = __version__
     provided_capabilities: frozenset[str] = PROVIDED_CAPABILITIES
     verified_python_versions: tuple[str, ...] = VERIFIED_PYTHON_VERSIONS
+    # Platform pairs this runtime accepts, independent of what an image asks
+    # for. Defaulted from the runtime's own accepted pairs so the platform
+    # decision is two-sided like the Python decision.
+    verified_platforms: tuple[tuple[str, str], ...] = VERIFIED_PLATFORMS
     execution_abi_version: str = EXECUTION_ABI_VERSION
     graph_codec_version: str = GRAPH_CODEC_VERSION
     ir_version: str = IR_VERSION
@@ -441,6 +460,11 @@ def decide_restore(document: Any, host: Host) -> dict[str, Any]:
             REASON_UNSUPPORTED_ARCHITECTURE,
             f"image does not accept architecture {host.architecture!r}",
         )
+    # Two independent gates on the platform pair, mirroring the Python-version
+    # decision below. The image says which pairs its creator targeted; this
+    # runtime says which pairs it accepts. An image that lists a pair this
+    # runtime does not accept -- Windows arm64, say -- cannot obtain it by
+    # asserting it, even with every archive checksum recomputed to match.
     if {
         "os": host.operating_system,
         "architecture": host.architecture,
@@ -449,6 +473,13 @@ def decide_restore(document: Any, host: Host) -> dict[str, Any]:
             REASON_UNSUPPORTED_PLATFORM,
             f"image does not accept platform {host.operating_system} "
             f"{host.architecture}",
+        )
+    if (host.operating_system, host.architecture) not in host.verified_platforms:
+        raise IncompatibleImage(
+            REASON_UNSUPPORTED_PLATFORM,
+            f"this runtime does not accept platform {host.operating_system} "
+            f"{host.architecture}; accepted pairs are "
+            f"{[f'{name} {machine}' for name, machine in host.verified_platforms]}",
         )
 
     # Two independent gates. The image says which interpreters its creator was
@@ -540,6 +571,7 @@ __all__ = [
     "MANDATORY_CAPABILITIES",
     "PROVIDED_CAPABILITIES",
     "SUPPORTED_PYTHON",
+    "VERIFIED_PLATFORMS",
     "VERIFIED_PYTHON_VERSIONS",
     "build_contract",
     "contract_summary",
