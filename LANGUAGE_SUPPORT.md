@@ -1,6 +1,7 @@
 # Python language support
 
-This matrix describes Continuum IR 0.3 as verified on CPython 3.12.13. The
+This matrix describes Continuum IR 0.4 (runtime 0.3.0) as verified on
+CPython 3.12.13. The
 status words are literal: **supported**, **partially supported**,
 **explicitly rejected**, or **untested**. “Supported” applies only inside the
 closed builtin, method, module, object, and resource model documented here.
@@ -38,7 +39,7 @@ closed builtin, method, module, object, and resource model documented here.
 | `*args` / `**kwargs` parameters | supported | Collected as a portable tuple and dict in frame locals |
 | `f(*iterable)` / `f(**mapping)` call syntax | supported | Gathered left to right into one list and dict; duplicate keywords rejected |
 | Keyword-only defaults | supported | Definition-time evaluation with identity preserved across calls and images |
-| Starred / double-star call arguments | explicitly rejected | No expansion IR |
+| Starred / double-star call arguments | supported | Gathered into one list and dict; evaluation stays left to right |
 | Nested functions without captures | supported | Function value is stored in the enclosing local |
 | Closures / free-variable capture | supported | Scope analysis marks captured bindings as cells; multi-level capture works |
 | `nonlocal` | supported | Writes through the shared cell; rejected when no enclosing function binds the name |
@@ -97,7 +98,8 @@ fall back to a same-named module global.
 | Comprehensions / nested comprehensions | explicitly rejected | No comprehension frame/scoping model |
 | Generator expressions / generators / `yield` | explicitly rejected | Generator suspension state is not represented |
 | Slices and subscripting | supported | Three-part slices supported |
-| F-strings | partially supported | Plain values and format specs; `!s`, `!r`, `!a` explicitly rejected |
+| F-strings | supported | Plain values and format specs |
+| F-string conversions (`!r`, `!s`, `!a`) | explicitly rejected | Conversion opcode not modelled |
 
 ## Context and resources
 

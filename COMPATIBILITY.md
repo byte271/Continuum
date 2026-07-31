@@ -29,19 +29,23 @@ compatibility measurement for that host.
 
 ## Measured results
 
-Measured on 2026-07-29 with CPython 3.12.13 on Linux x86_64:
+The first two columns were measured on 2026-07-29 with CPython 3.12.13 on
+Linux x86_64. The IR 0.4 column was measured on 2026-07-30 with the same
+CPython on Windows x86_64, so it is also the first corpus run on a host other
+than Linux. Raw results:
+`compatibility/results/ir-0.4-runtime-0.3.0-windows-x86_64-2026-07-30.json`.
 
-| Gate | Initial IR 0.2 | After positional defaults, IR 0.3 |
-| --- | ---: | ---: |
-| Corpus total | 50 | 50 |
-| Compiled | 34 | 37 |
-| Uninterrupted output matched CPython | 33 | 36 |
-| Same-process checkpoint/resume matched CPython | 32 | 35 |
-| New-process checkpoint/resume matched CPython | 32 | 35 |
-| Full compatibility rate | **64.0%** | **70.0%** |
-| Cross-platform corpus validation | not run | not run |
-| Corpus regenerated on macOS arm64 | not run | not run |
-| Corpus regenerated on Windows x86_64 | not run | not run |
+| Gate | Initial IR 0.2 | IR 0.3 | IR 0.4 / runtime 0.3.0 |
+| --- | ---: | ---: | ---: |
+| Corpus total | 50 | 50 | 50 |
+| Compiled | 34 | 37 | 42 |
+| Uninterrupted output matched CPython | 33 | 36 | 41 |
+| Same-process checkpoint/resume matched CPython | 32 | 35 | 40 |
+| New-process checkpoint/resume matched CPython | 32 | 35 | 40 |
+| Full compatibility rate | **64.0%** | **70.0%** | **80.0%** |
+| Cross-platform corpus validation | not run | not run | not run |
+| Corpus regenerated on macOS arm64 | not run | not run | not run |
+| Corpus regenerated on Windows x86_64 | not run | not run | measured, this column |
 
 Raw per-program results and timings are in
 `compatibility/results/baseline-2026-07-29.json`; the generated table is in
@@ -55,7 +59,10 @@ benchmark in `PERFORMANCE.md` remains the performance source.
 
 ## Current retained failures
 
-- 13 programs fail compilation with explicit diagnostics.
+- 8 programs fail compilation with explicit diagnostics at IR 0.4: three
+  comprehensions, two augmented assignments to an attribute or subscript,
+  one chained assignment, one chained comparison, and one f-string
+  conversion.
 - One program uses a live `_hashlib.HASH` value at the selected checkpoint;
   image creation rejects that native object.
 - One program iterates a `dict_items` view; the runtime rejects that iterator

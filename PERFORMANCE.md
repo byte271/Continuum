@@ -1,5 +1,17 @@
 # Performance
 
+> **These numbers are stale and must not be quoted for the current runtime.**
+> Every measurement on this page was taken at Continuum **0.1.1.dev0** against
+> **IR 0.2**. The shipping runtime is 0.3.0 against IR 0.4, which added
+> exception handling, full argument binding, closure cells, and VM-owned
+> classes — all of which touch the interpreter loop. No measurement has been
+> repeated since. Treat the slowdown figures as historical, not current.
+>
+> `benchmarks/measure.py` additionally imports the POSIX-only `resource`
+> module at import time, so it cannot run on Windows at all, and no workflow
+> executes it, so performance can regress silently between releases.
+> Re-measuring on the current runtime is tracked in `ROADMAP.md`.
+
 Correctness remains the priority. These are raw local measurements from one
 Linux x86_64 environment, not portable targets.
 
