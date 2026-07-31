@@ -7,11 +7,17 @@ commit `15bceefece050d06a1f504244a77434e31fd5228` in
 The historical untouched-baseline note below describes the original imported
 workspace, not the current repository identity.
 
-That immutable proof used IR 0.2/runtime 0.1.1.dev0. Current development uses
-IR 0.3/runtime 0.2.0 after adding positional default arguments. The proof
-below was produced at runtime 0.2.0a1. Its
-same-machine audit passes, and a freshly written IR 0.3 image completed the
-same two-job Linux-to-macOS proof in
+That immutable proof used IR 0.2/runtime 0.1.1.dev0. The released v0.2.0 uses
+IR 0.3. Current development on this branch uses IR 0.4, which adds portable
+`try/except`, complete argument binding, lexical closures with shared cells,
+and VM-owned classes; its own Linux-to-macOS proof is
+[Actions run 30592158078](https://github.com/byte271/Continuum/actions/runs/30592158078)
+at commit `21f7b2e`.
+
+The audit below was performed at runtime 0.2.0a1 against IR 0.3 and has not
+been repeated for IR 0.4. Its same-machine findings still describe the
+execution path, but the four language features above postdate it. A freshly
+written IR 0.3 image completed the same two-job Linux-to-macOS proof in
 [Actions run 30509186641](https://github.com/byte271/Continuum/actions/runs/30509186641)
 at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa`.
 
