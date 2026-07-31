@@ -32,7 +32,7 @@ therefore cannot succeed across hosts with different path forms.
 Resume rejects an image unless all of these checks pass:
 
 - container format 0.2 (or legacy 0.1) and current IR 0.4 schema validation;
-- Continuum runtime implementation. Container format 0.2 images no longer require an exact runtime version `0.4.0a1`; they require the execution ABI and the capability set. Container format 0.1 images still require it exactly;
+- Continuum runtime implementation. Container format 0.2 images no longer require an exact runtime version `0.5.0a1`; they require the execution ABI and the capability set. Container format 0.1 images still require it exactly;
 - CPython 3.12.13 or 3.13.14 for container format 0.2 (the exact verified
   allowlist); exactly the creator's CPython for legacy format 0.1;
 - target OS in `Linux`, `Darwin`, `Windows`;

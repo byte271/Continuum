@@ -1,6 +1,6 @@
 # Status
 
-Version: 0.4.0a1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · migration plan 1.0 · CPython 3.12.13 and 3.13.14
+Version: 0.5.0a1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · migration plan 1.0 · CPython 3.12.13 and 3.13.14
 Updated: 2026-07-31
 
 ## Platform matrix

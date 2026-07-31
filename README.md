@@ -3,7 +3,7 @@
 [![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml)
 [![Cross-Python CLI proof](https://github.com/byte271/Continuum/actions/workflows/cross-python-cli-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-python-cli-proof.yml)
 [![Runtime bundles](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml)
-[![Version](https://img.shields.io/badge/version-0.4.0a1-blue.svg)](STATUS.md)
+[![Version](https://img.shields.io/badge/version-0.5.0a1-blue.svg)](STATUS.md)
 [![Python](https://img.shields.io/badge/CPython-3.12.13%20%7C%203.13.14-3776ab.svg)](#requirements)
 [![Platforms](https://img.shields.io/badge/native-Linux%20%7C%20macOS%20%7C%20Windows-success.svg)](#platform-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
