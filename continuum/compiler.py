@@ -354,7 +354,13 @@ class FunctionCompiler:
         elif isinstance(node, ast.If):
             self.expression(node.test)
             false_jump = self.emit("JUMP_IF_FALSE", -1, line)
+            # The taken branch is a control region in its own right. Without
+            # this, wrapping existing code in an `if` would leave the enclosed
+            # resume points looking unmoved, and a migration would silently
+            # resume inside a conditional the old revision never entered.
+            self.enter_region("then")
             self.statements(node.body)
+            self.exit_region()
             if node.orelse:
                 end_jump = self.emit("JUMP", -1, line)
                 self.patch(false_jump, len(self.code))

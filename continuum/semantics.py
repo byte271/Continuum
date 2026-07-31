@@ -130,6 +130,15 @@ class ProgramSemantics:
         default_factory=dict
     )
     bindings: dict[str, set[str]] = field(default_factory=dict)
+    classes: dict[str, "ClassIdentity"] = field(default_factory=dict)
+    class_by_ir_id: dict[str, "ClassIdentity"] = field(default_factory=dict)
+    ambiguous_classes: dict[str, list[str]] = field(default_factory=dict)
+    # (ir_function_id, pc) -> ops of the enclosing statement up to and
+    # including pc. Two resume points can only correspond if the operand-stack
+    # work performed within their statement so far is the same.
+    statement_prefix: dict[tuple[str, int], tuple[str, ...]] = field(
+        default_factory=dict
+    )
 
     def function_for_ir_id(self, ir_function_id: str) -> FunctionIdentity | None:
         return self.by_ir_id.get(ir_function_id)
@@ -174,6 +183,72 @@ def control_region_identity(
             "path": [list(entry) for entry in region_path],
         },
     )
+
+
+def class_identity(scope_path: tuple[str, ...], name: str, members: tuple[str, ...]) -> str:
+    """Identity of a VM-owned class, including its member layout.
+
+    Members are part of the identity because existing instances were built
+    against that layout. A class that gains or loses a member is a different
+    class as far as an already-live instance is concerned, so the mapper is
+    forced to consider the change rather than quietly rebinding.
+    """
+
+    return _digest(
+        "scl",
+        {"scope_path": list(scope_path), "name": name, "members": sorted(members)},
+    )
+
+
+@dataclass(frozen=True)
+class ClassIdentity:
+    semantic_id: str
+    ir_class_id: str
+    name: str
+    scope_path: tuple[str, ...]
+    members: tuple[str, ...]
+
+    def evidence(self) -> dict[str, Any]:
+        return {
+            "semantic_class_id": self.semantic_id,
+            "ir_class_id": self.ir_class_id,
+            "name": self.name,
+            "scope_path": list(self.scope_path),
+            "members": list(self.members),
+        }
+
+
+def _collect_classes(
+    ir: dict[str, Any], function_scope: dict[str, tuple[str, ...]]
+) -> tuple[dict[str, ClassIdentity], dict[str, ClassIdentity], dict[str, list[str]]]:
+    by_semantic: dict[str, ClassIdentity] = {}
+    by_ir: dict[str, ClassIdentity] = {}
+    claims: dict[str, list[str]] = {}
+    for ir_function_id, definition in sorted(ir["functions"].items()):
+        owner = function_scope.get(ir_function_id, (ir_function_id,))
+        for instruction in definition["code"]:
+            if instruction["op"] != "MAKE_CLASS":
+                continue
+            argument = instruction["arg"]
+            members = tuple(argument["members"])
+            scope_path = (*owner, argument["name"])
+            semantic_id = class_identity(scope_path, argument["name"], members)
+            identity = ClassIdentity(
+                semantic_id=semantic_id,
+                ir_class_id=argument["class_id"],
+                name=argument["name"],
+                scope_path=scope_path,
+                members=members,
+            )
+            by_semantic[semantic_id] = identity
+            by_ir[argument["class_id"]] = identity
+            claims.setdefault(semantic_id, []).append(argument["class_id"])
+    ambiguous = {
+        semantic_id: sorted(ids)
+        for semantic_id, ids in claims.items()
+        if len(set(ids)) > 1
+    }
+    return by_semantic, by_ir, ambiguous
 
 
 def _scope_path(ir: dict[str, Any], ir_function_id: str) -> tuple[str, ...]:
@@ -276,6 +351,24 @@ def analyze(source: str, source_name: str) -> ProgramSemantics:
         for semantic_id, names in claims.items()
         if len(names) > 1
     }
+    scope_paths = {
+        identity.ir_function_id: identity.scope_path
+        for identity in semantics.by_ir_id.values()
+    }
+    (
+        semantics.classes,
+        semantics.class_by_ir_id,
+        semantics.ambiguous_classes,
+    ) = _collect_classes(ir, scope_paths)
+    for ir_function_id, definition in ir["functions"].items():
+        function_sites = sites[ir_function_id]
+        for pc in range(len(definition["code"])):
+            start = pc
+            while start > 0 and function_sites[start - 1] == function_sites[pc]:
+                start -= 1
+            semantics.statement_prefix[(ir_function_id, pc)] = tuple(
+                definition["code"][index]["op"] for index in range(start, pc + 1)
+            )
     return semantics
 
 
@@ -319,6 +412,8 @@ def analyze_image_source(source: str, source_name: str, ir: dict[str, Any]) -> P
 
 
 __all__ = [
+    "ClassIdentity",
+    "class_identity",
     "FunctionIdentity",
     "ProgramSemantics",
     "SEMANTIC_MODEL_VERSION",
