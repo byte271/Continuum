@@ -38,7 +38,19 @@ jobs:
         with:
           python-version: "3.12.13"
 
-      - name: Repeat the demo race regression and the anti-replay proof
+      - name: Preflight - exact interpreter and expected discovery
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version=$(python -c "import platform; print(platform.python_version())")
+          test "$version" = "3.12.13" || {
+            echo "expected CPython 3.12.13, got $version"; exit 1; }
+          count=$(python -c "import unittest; l=unittest.TestLoader(); s=l.discover('tests', top_level_dir='.'); assert not l.errors, l.errors; f=lambda x: sum(map(f,x)) if isinstance(x,unittest.TestSuite) else 1; print(f(s))")
+          echo "discovered $count tests"
+          # A mistyped module name would otherwise repeat nothing, silently.
+          test "$count" -ge 160 || { echo "discovery too low: $count"; exit 1; }
+
+      - name: Repeat the targeted race regressions
         shell: bash
         env:
           # Both races were observed on Windows, which is also the slowest
@@ -48,7 +60,15 @@ jobs:
           set -Eeuo pipefail
           mkdir -p stress-logs
           status=0
-          for target in tests.test_cli_demo tests.test_adversarial_restart; do
+          # Each target is repeated and reported separately, so a green job
+          # cannot hide which target ran fewer times or was skipped.
+          for target in \
+            tests.test_cli_demo \
+            tests.test_adversarial_restart \
+            tests.test_process_independent \
+            tests.test_harness_hold \
+            tests.test_anti_replay_controls \
+            tests.test_session.PublishedDocumentReadTests; do
             pass=0; fail=0
             for i in $(seq 1 "$REPEATS"); do
               if python -m unittest "$target" > "stress-logs/${target}-${i}.log" 2>&1; then
@@ -63,7 +83,15 @@ jobs:
             done
             echo "$target: $pass passed, $fail failed of $REPEATS" \
               | tee -a stress-logs/summary.txt
+            # A target that did not run its repeats is a failure, not a pass.
+            if [ "$((pass+fail))" -ne "$REPEATS" ]; then
+              echo "$target: expected $REPEATS iterations, saw $((pass+fail))" \
+                | tee -a stress-logs/summary.txt
+              status=1
+            fi
           done
+          echo "--- per-target summary ---"
+          cat stress-logs/summary.txt
           exit "$status"
 
       - name: Documentation consistency

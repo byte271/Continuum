@@ -186,6 +186,64 @@ def wait_for_request(request_path: Path, source: subprocess.Popen,
     raise ContinuumError(f"freeze request {request_path} was not published in time")
 
 
+def freeze_held_source(
+    command: list[str],
+    session_id: str,
+    image: Path,
+    source: subprocess.Popen,
+    sync_dir: Path,
+    ready: dict[str, Any],
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    """Freeze a held source, in the one order that cannot lose the race.
+
+    Starts the real freeze client, waits for its request document to exist
+    while the source is still alive, releases the hold only then, and reports
+    what was observed. Every caller that freezes a held source uses this, so
+    the ordering cannot drift between the demo, the tests, and the proof
+    generator.
+
+    Returns evidence describing what was observed, for callers that retain it.
+    """
+
+    request_path = Path(ready["request_path"])
+    freeze = subprocess.Popen(
+        [*command, "freeze", session_id, "-o", str(image)],
+        cwd=str(cwd) if cwd else None,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        wait_for_request(request_path, source, freeze)
+        source_alive = source.poll() is None
+        if not source_alive:
+            raise ContinuumError(
+                "source exited before the freeze request was published"
+            )
+        release(sync_dir)
+        stdout, stderr = freeze.communicate(timeout=timeout)
+    except BaseException:
+        if freeze.poll() is None:
+            freeze.kill()
+            freeze.communicate(timeout=30)
+        raise
+    return {
+        "returncode": freeze.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+        "safe_points_at_hold": ready["safe_points_executed"],
+        "instructions_at_hold": ready["instructions_executed"],
+        "source_pid_at_ready": ready["pid"],
+        "readiness_published_before_freeze_client": True,
+        "request_published_before_release": True,
+        "source_alive_when_request_published": source_alive,
+        "synchronization": "safe-point hold, not an output marker",
+    }
+
+
 def release(sync_dir: Path) -> None:
     """Release the held safe point. Only valid once."""
 

@@ -35,6 +35,7 @@ from continuum._harness import (  # noqa: E402
     release as harness_release,
     wait_for_ready as harness_wait_for_ready,
     wait_for_request as harness_wait_for_request,
+    freeze_held_source as harness_freeze_held_source,
 )
 
 
@@ -323,43 +324,28 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         wait_for(stdout_log, f"ACTION {nonce} ITER 30", source, 120)
         os.fsync(stdout.fileno())
         ready = harness_wait_for_ready(source, sync_dir)
-        request_path = Path(ready["request_path"])
-        evidence["hold"] = {
-            "safe_points_executed": ready["safe_points_executed"],
-            "instructions_executed": ready["instructions_executed"],
-            "source_pid_at_ready": ready["pid"],
-            "readiness_published_before_freeze_client": True,
-        }
-        freeze = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "continuum",
-                "freeze",
-                session_id,
-                "-o",
-                str(image),
-            ],
+        freeze_evidence = harness_freeze_held_source(
+            [sys.executable, "-m", "continuum"],
+            session_id,
+            image,
+            source,
+            sync_dir,
+            ready,
             cwd=repository,
             env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
         )
-        # Release only once the real request exists and the source is alive.
-        harness_wait_for_request(request_path, source, freeze)
-        source_alive = source.poll() is None
-        evidence["hold"].update(
-            {
-                "request_published_before_release": True,
-                "source_alive_when_request_published": source_alive,
-                "synchronization": "safe-point hold, not an output marker",
-            }
-        )
-        if not source_alive:
-            source.kill()
-            raise RuntimeError("source exited before the freeze request was published")
-        harness_release(sync_dir)
-        freeze_stdout, freeze_stderr = freeze.communicate(timeout=120)
+        evidence["hold"] = {
+            key: value
+            for key, value in freeze_evidence.items()
+            if key not in {"stdout", "stderr", "returncode"}
+        }
+        freeze_stdout = freeze_evidence["stdout"]
+        freeze_stderr = freeze_evidence["stderr"]
+
+        class _FreezeResult:
+            returncode = freeze_evidence["returncode"]
+
+        freeze = _FreezeResult()
         (output / "freeze-stdout.log").write_bytes(freeze_stdout)
         (output / "freeze-stderr.log").write_bytes(freeze_stderr)
         if freeze.returncode != 0:
