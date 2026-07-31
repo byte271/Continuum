@@ -344,7 +344,9 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
             cwd=repository,
             env=environment,
         )
-        evidence["hold"] = {
+        # The evidence document is assembled further down; keep this locally
+        # until then rather than writing into a name that does not exist yet.
+        hold_evidence = {
             key: value
             for key, value in freeze_evidence.items()
             if key not in {"stdout", "stderr", "returncode"}
@@ -424,6 +426,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
 
     evidence = {
         "phase": "source",
+        "hold": hold_evidence,
         "qualified_native_linux_x86_64": qualified and not args.rehearsal,
         "rehearsal": bool(args.rehearsal),
         "container_markers": markers,
