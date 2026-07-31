@@ -1,0 +1,147 @@
+name: Verify published release
+
+# Installing from a published URL is a different claim from installing a
+# CI-local archive: it exercises the release assets, their digests, and the
+# download path an actual user takes. v0.3.0 shipped with only the Windows
+# path verified that way, because the person publishing it had a Windows
+# machine and nothing else. This closes that gap for all three platforms.
+#
+# Run it after publishing a release, with the tag as input.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to verify, for example v0.3.1"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  install-from-release:
+    name: ${{ matrix.platform }} from the published URL
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            asset: continuum-linux-x86_64.tar.gz
+          - os: macos-26
+            platform: macos-arm64
+            asset: continuum-macos-arm64.tar.gz
+          - os: windows-2025
+            platform: windows-x86_64
+            asset: continuum-windows-x86_64.zip
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Download the published asset and its sidecar
+        shell: bash
+        env:
+          BASE: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p release-check
+          cd release-check
+          # No token: this must work exactly as it does for a stranger.
+          curl -fLsS -O "$BASE/${{ matrix.asset }}"
+          curl -fLsS -O "$BASE/${{ matrix.asset }}.sha256"
+          ls -l
+
+      - name: Verify the published digest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd release-check
+          expected=$(awk '{print $1}' "${{ matrix.asset }}.sha256")
+          case "$RUNNER_OS" in
+            macOS) actual=$(shasum -a 256 "${{ matrix.asset }}" | awk '{print $1}') ;;
+            *)     actual=$(sha256sum "${{ matrix.asset }}" | awk '{print $1}') ;;
+          esac
+          echo "expected $expected"
+          echo "actual   $actual"
+          test "$expected" = "$actual"
+          echo "DIGEST=$expected" >> "$GITHUB_ENV"
+
+      - name: Install from the downloaded archive (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          packaging/install.sh \
+            --archive "release-check/${{ matrix.asset }}" \
+            --sha256 "$DIGEST" \
+            --prefix "$HOME/continuum-release-check"
+          "$HOME/continuum-release-check/bin/continuum" doctor
+
+      - name: Install from the downloaded archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & .\packaging\install.ps1 `
+            -Archive "release-check\${{ matrix.asset }}" `
+            -Sha256 $env:DIGEST `
+            -Prefix "$env:USERPROFILE\continuum-release-check"
+          & "$env:USERPROFILE\continuum-release-check\bin\continuum.cmd" doctor
+          if ($LASTEXITCODE -ne 0) { throw "installed doctor failed" }
+
+      - name: Run a real continuation from the installed bundle (POSIX)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          "$HOME/continuum-release-check/bin/continuum" demo \
+            --output-dir "$HOME/release-demo" --iterations 2000
+          # The demo fails itself if the resumed output diverges, but assert
+          # the comparison explicitly so a silent change cannot pass.
+          grep -q '"final_hash_matches": true' "$HOME/release-demo/comparison.json"
+          grep -q '"combined_output_matches_control": true' \
+            "$HOME/release-demo/comparison.json"
+
+      - name: Run a real continuation from the installed bundle (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & "$env:USERPROFILE\continuum-release-check\bin\continuum.cmd" demo `
+            --output-dir "$env:USERPROFILE\release-demo" --iterations 2000
+          if ($LASTEXITCODE -ne 0) { throw "demo failed" }
+          $comparison = Get-Content -Raw "$env:USERPROFILE\release-demo\comparison.json" |
+            ConvertFrom-Json
+          if (-not $comparison.final_hash_matches) { throw "final hash differs" }
+          if (-not $comparison.combined_output_matches_control) {
+            throw "combined output differs from the control"
+          }
+
+      - name: Confirm the installed runtime reports the released version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          case "$RUNNER_OS" in
+            Windows) command="$USERPROFILE/continuum-release-check/bin/continuum.cmd" ;;
+            *)       command="$HOME/continuum-release-check/bin/continuum" ;;
+          esac
+          reported=$("$command" --version | awk '{print $2}')
+          expected="${{ inputs.tag }}"
+          expected="${expected#v}"
+          echo "tag $expected, runtime reports $reported"
+          test "$reported" = "$expected"
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-verify-${{ matrix.platform }}-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            release-check
+            ~/release-demo/comparison.json
+          retention-days: 90
