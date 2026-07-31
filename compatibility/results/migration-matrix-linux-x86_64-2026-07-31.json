@@ -3,7 +3,7 @@
   "accepted_migration_correctness": 1.0,
   "ambiguous_migrations_accepted": 0,
   "correctly_refused": 959,
-  "elapsed_seconds": 45.62,
+  "elapsed_seconds": 46.22,
   "explicitly_refused_narrower_than_hoped": 1,
   "infrastructure_failures": 0,
   "pairs": [
