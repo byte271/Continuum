@@ -34,18 +34,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12.13"
+      # actions/setup-python does not offer 3.12.13 on windows-2025, and this
+      # project requires that exact patch version. uv provides identical
+      # python-build-standalone interpreters on all three platforms.
+      - name: Provision exact CPython 3.12.13
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv python install 3.12.13
+          echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
 
       - name: Preflight - exact interpreter and expected discovery
         shell: bash
         run: |
           set -Eeuo pipefail
-          version=$(python -c "import platform; print(platform.python_version())")
+          version=$("$PYBIN" -c "import platform; print(platform.python_version())")
           test "$version" = "3.12.13" || {
             echo "expected CPython 3.12.13, got $version"; exit 1; }
-          count=$(python -c "import unittest; l=unittest.TestLoader(); s=l.discover('tests', top_level_dir='.'); assert not l.errors, l.errors; f=lambda x: sum(map(f,x)) if isinstance(x,unittest.TestSuite) else 1; print(f(s))")
+          count=$("$PYBIN" -c "import unittest; l=unittest.TestLoader(); s=l.discover('tests', top_level_dir='.'); assert not l.errors, l.errors; f=lambda x: sum(map(f,x)) if isinstance(x,unittest.TestSuite) else 1; print(f(s))")
           echo "discovered $count tests"
           # A mistyped module name would otherwise repeat nothing, silently.
           test "$count" -ge 160 || { echo "discovery too low: $count"; exit 1; }
@@ -71,7 +82,7 @@ jobs:
             tests.test_session.PublishedDocumentReadTests; do
             pass=0; fail=0
             for i in $(seq 1 "$REPEATS"); do
-              if python -m unittest "$target" > "stress-logs/${target}-${i}.log" 2>&1; then
+              if "$PYBIN" -m unittest "$target" > "stress-logs/${target}-${i}.log" 2>&1; then
                 pass=$((pass+1))
                 rm -f "stress-logs/${target}-${i}.log"
               else
@@ -96,16 +107,17 @@ jobs:
 
       - name: Documentation consistency
         if: always()
-        run: python -m unittest tests.test_documentation_consistency
+        shell: bash
+        run: "$PYBIN" -m unittest tests.test_documentation_consistency
 
       - name: Compatibility corpus
         if: always()
         shell: bash
         run: |
           set -Eeuo pipefail
-          PYTHONPATH=. python -m compatibility.runner \
+          PYTHONPATH=. "$PYBIN" -m compatibility.runner \
             --output "stress-logs/corpus-${{ matrix.os }}.json"
-          python - <<'PY'
+          "$PYBIN" - <<'PY'
           import json, glob
           for path in glob.glob("stress-logs/corpus-*.json"):
               rows = json.load(open(path, encoding="utf-8"))["results"]
@@ -153,9 +165,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12.13"
+      # actions/setup-python does not offer 3.12.13 on windows-2025, and this
+      # project requires that exact patch version. uv provides identical
+      # python-build-standalone interpreters on all three platforms.
+      - name: Provision exact CPython 3.12.13
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv python install 3.12.13
+          echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
 
       - name: Repeat the full suite and retain the first failure
         shell: bash
@@ -166,7 +189,7 @@ jobs:
           mkdir -p stress-logs
           pass=0; fail=0; failed_tests=""
           for i in $(seq 1 "$REPEATS"); do
-            if python -m unittest discover -s tests -v \
+            if "$PYBIN" -m unittest discover -s tests -v \
                  > "stress-logs/full-${i}.log" 2>&1; then
               pass=$((pass+1))
               rm -f "stress-logs/full-${i}.log"
@@ -178,7 +201,7 @@ jobs:
               # Every failing iteration is kept: a soak exists to collect them.
             fi
           done
-          python - <<PY | tee stress-logs/report.json
+          "$PYBIN" - <<PY | tee stress-logs/report.json
           import json, platform, sys
           print(json.dumps({
               "commit": "${{ github.sha }}",
