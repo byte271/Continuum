@@ -29,6 +29,14 @@ from common import (
 )
 from qualification import qualify_linux_source
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from continuum._harness import (  # noqa: E402
+    environment_for as harness_environment,
+    release as harness_release,
+    wait_for_ready as harness_wait_for_ready,
+    wait_for_request as harness_wait_for_request,
+)
+
 
 def container_markers() -> list[str]:
     markers = []
@@ -274,6 +282,9 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
     stdout_log = output / "source-stdout.log"
     stderr_log = output / "source-stderr.log"
     nonce = uuid.uuid4().hex
+    sync_dir = output / "harness-sync"
+    sync_dir.mkdir(parents=True, exist_ok=True)
+    source_environment = harness_environment(sync_dir, environment)
     source_started_at = utc_now()
     source_started_ns = time.time_ns()
     with stdout_log.open("wb", buffering=0) as stdout:
@@ -291,7 +302,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
                 nonce,
             ],
             cwd=repository,
-            env=environment,
+            env=source_environment,
             stdout=stdout,
             stderr=subprocess.PIPE,
         )
@@ -305,9 +316,21 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
                 + first_stderr.decode("utf-8", errors="replace")
             )
         session_id = first_stderr.decode("utf-8").strip().split(": ", 1)[1]
+        # Real actions must occur before the hold, so the checkpoint is taken
+        # mid-computation rather than at startup. This wait is evidence, not
+        # synchronization: the hold below is what guarantees the source is
+        # still alive when the freeze request lands.
         wait_for(stdout_log, f"ACTION {nonce} ITER 30", source, 120)
         os.fsync(stdout.fileno())
-        freeze = subprocess.run(
+        ready = harness_wait_for_ready(source, sync_dir)
+        request_path = Path(ready["request_path"])
+        evidence["hold"] = {
+            "safe_points_executed": ready["safe_points_executed"],
+            "instructions_executed": ready["instructions_executed"],
+            "source_pid_at_ready": ready["pid"],
+            "readiness_published_before_freeze_client": True,
+        }
+        freeze = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
@@ -321,16 +344,30 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
             env=environment,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=120,
         )
-        (output / "freeze-stdout.log").write_bytes(freeze.stdout)
-        (output / "freeze-stderr.log").write_bytes(freeze.stderr)
+        # Release only once the real request exists and the source is alive.
+        harness_wait_for_request(request_path, source, freeze)
+        source_alive = source.poll() is None
+        evidence["hold"].update(
+            {
+                "request_published_before_release": True,
+                "source_alive_when_request_published": source_alive,
+                "synchronization": "safe-point hold, not an output marker",
+            }
+        )
+        if not source_alive:
+            source.kill()
+            raise RuntimeError("source exited before the freeze request was published")
+        harness_release(sync_dir)
+        freeze_stdout, freeze_stderr = freeze.communicate(timeout=120)
+        (output / "freeze-stdout.log").write_bytes(freeze_stdout)
+        (output / "freeze-stderr.log").write_bytes(freeze_stderr)
         if freeze.returncode != 0:
             source.kill()
             source.wait(timeout=30)
             raise RuntimeError(
                 "freeze failed: "
-                + freeze.stderr.decode("utf-8", errors="replace")
+                + freeze_stderr.decode("utf-8", errors="replace")
             )
         source_returncode = source.wait(timeout=60)
         source_exited_ns = time.time_ns()

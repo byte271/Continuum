@@ -70,22 +70,31 @@ def _create_json_exclusive(path: Path, value: dict[str, Any]) -> None:
             pass
 
 
-PUBLISHED_READ_TIMEOUT_SECONDS = 5.0
 PUBLISHED_READ_POLL_SECONDS = 0.002
+# How long a control document may stay unopenable before the VM gives up on a
+# freeze request entirely. Spent across safe points, never inside one.
+REQUEST_UNREADABLE_BUDGET_SECONDS = 30.0
 
 
-def read_published_json(path: Path, timeout: float = PUBLISHED_READ_TIMEOUT_SECONDS):
+class PublicationPending(Exception):
+    """A published document exists but cannot be opened yet.
+
+    Windows leaves a short window around an atomic replace or hard link in
+    which the final name exists but opening it fails with EACCES; antivirus
+    and indexers widen it. This is a transient condition, not corruption, and
+    each call site decides how long it is willing to wait for it.
+    """
+
+
+def read_published_json(path: Path, timeout: float = 0.0):
     """Read a document published by atomic replace or hard link.
 
-    Every control document in Continuum becomes visible at its final name in
-    one atomic step, so its contents are always complete. Windows adds a
-    separate hazard: for a short window around that step the name exists but
-    cannot be opened, and the failure surfaces as PermissionError/EACCES
-    rather than as a missing file. Antivirus and search indexers widen the
-    same window. Treat it as "not published yet" and retry.
-
-    This is the single reader used everywhere a published document is
-    consumed, so the behavior cannot drift between call sites.
+    One parser and one retry classification for every call site. `timeout` is
+    how long *this* call may block: the default of zero never blocks, and
+    raises PublicationPending so a caller with its own outer loop or its own
+    deadline decides what to do. A malformed document is corruption and raises
+    immediately, because atomic publication is never partial. A missing
+    document raises FileNotFoundError and is never confused with a pending one.
     """
 
     deadline = time.monotonic() + timeout
@@ -94,12 +103,10 @@ def read_published_json(path: Path, timeout: float = PUBLISHED_READ_TIMEOUT_SECO
             return json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             raise
-        except PermissionError:
+        except PermissionError as exc:
             if time.monotonic() >= deadline:
-                raise
+                raise PublicationPending(str(path)) from exc
         except json.JSONDecodeError:
-            # An atomically published document is never partial, so this means
-            # the file is genuinely malformed. Do not retry.
             raise
         time.sleep(PUBLISHED_READ_POLL_SECONDS)
 
@@ -130,6 +137,10 @@ class SessionController:
         self.freeze_requested = False
         self._signal_notifications = _uses_signal_notifications()
         self._next_request_poll = 0.0
+        # Set when a freeze request exists but could not be opened yet. The
+        # request stays pending and is retried at a later safe point; the
+        # budget is spent across safe points, never inside one.
+        self._request_unreadable_since: float | None = None
         self._previous_signal_handler: Any = None
         self.record = {
             "session_id": self.session_id,
@@ -176,7 +187,29 @@ class SessionController:
         if not self.request_path.exists() or self.response_path.exists():
             return
         try:
-            request = read_published_json(self.request_path)
+            try:
+                # Zero timeout: a safe point must not sleep.
+                request = read_published_json(self.request_path)
+            except PublicationPending:
+                now = time.monotonic()
+                if self._request_unreadable_since is None:
+                    self._request_unreadable_since = now
+                elif (
+                    now - self._request_unreadable_since
+                    >= REQUEST_UNREADABLE_BUDGET_SECONDS
+                ):
+                    self._request_unreadable_since = None
+                    raise ContinuumError(
+                        "freeze request could not be opened within "
+                        f"{REQUEST_UNREADABLE_BUDGET_SECONDS:.0f}s: "
+                        f"{self.request_path}"
+                    )
+                # Keep the request pending and let execution continue. The
+                # existing Windows poll interval already rate-limits the
+                # retry, so this cannot busy-poll.
+                self.freeze_requested = True
+                return
+            self._request_unreadable_since = None
             if request.get("control_token") != self.control_token:
                 raise ContinuumError("invalid session control token")
             if request.get("command") != "freeze":
@@ -245,7 +278,15 @@ def list_sessions() -> list[dict[str, Any]]:
     result = []
     for path in sorted(directory.glob("cont-*.json")):
         try:
+            # Non-blocking: one temporarily unopenable record must not stall
+            # `continuum sessions`. It is reported as unreadable instead.
             record = read_published_json(path)
+        except PublicationPending:
+            result.append(
+                {"session_id": path.stem, "status": "unreadable", "pid": None,
+                 "program": str(path)}
+            )
+            continue
         except (OSError, json.JSONDecodeError):
             continue
         if record.get("status") in {"running", "starting"}:
@@ -259,7 +300,11 @@ def list_sessions() -> list[dict[str, Any]]:
 def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
     record_path = continuum_home() / "sessions" / f"{session_id}.json"
     try:
-        record = read_published_json(record_path)
+        record = read_published_json(record_path, timeout=1.0)
+    except PublicationPending as exc:
+        raise ContinuumError(
+            f"session record is not readable: {record_path}"
+        ) from exc
     except FileNotFoundError as exc:
         raise ContinuumError(f"unknown session: {session_id}") from exc
     except json.JSONDecodeError as exc:
@@ -304,15 +349,19 @@ def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
             if response_path.exists():
                 try:
                     response = read_published_json(response_path)
-                except FileNotFoundError:
-                    # Cancelled between the check and the read; keep waiting.
+                except (FileNotFoundError, PublicationPending):
+                    # Not readable yet or cancelled; spend the outer 30s
+                    # deadline rather than an independent one.
+                    time.sleep(0.01)
                     continue
                 except json.JSONDecodeError as exc:
                     raise ContinuumError("invalid freeze response") from exc
                 break
             try:
                 current = read_published_json(record_path)
-            except (OSError, json.JSONDecodeError):
+            except (OSError, PublicationPending, json.JSONDecodeError):
+                # Unreadable right now says nothing about the session; the
+                # outer deadline governs.
                 current = {}
             if current.get("status") not in {"running", "starting"}:
                 raise ContinuumError(

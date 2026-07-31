@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from . import IR_VERSION, SUPPORTED_PYTHON, __version__
+from ._harness import (
+    DEFAULT_HOLD_SAFE_POINT,
+    HOLD_SAFE_POINT_ENV,
+    SYNC_ENV,
+    release as harness_release,
+    safe_point_callback as harness_safe_point_callback,
+    wait_for_ready as harness_wait_for_ready,
+    wait_for_request as harness_wait_for_request,
+)
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
 from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
@@ -50,120 +59,14 @@ VERIFIED_SAME_HOST_TARGETS = (
 VERIFIED_CROSS_PLATFORM_PATHS = ("Linux x86_64 -> macOS arm64",)
 
 
-# Demonstration harness synchronization. These names are set by `continuum
-# demo` on the source process it launches and are honored nowhere else. They
-# hold the source at a chosen safe point so the demonstration never depends on
-# the freeze client winning a race against a fast host. The freeze protocol
-# itself is untouched: the held process still observes a genuinely published
-# request through the ordinary session mechanism.
-DEMO_SYNC_ENV = "CONTINUUM_DEMO_SYNC"
-DEMO_HOLD_SAFE_POINT_ENV = "CONTINUUM_DEMO_HOLD_SAFE_POINT"
-# Measured against examples/demo.py: its 5,000-entry build loop ends at safe
-# point 15,025, which is also where the first progress line is written, and a
-# minimum 1,000-iteration workload ends near safe point 22,375. Holding at
-# 16,000 is therefore always after real progress and always before the end of
-# the shortest workload the demonstration accepts.
-DEMO_HOLD_SAFE_POINT = 16_000
-DEMO_READY_TIMEOUT_SECONDS = 120.0
-DEMO_START_TIMEOUT_SECONDS = 120.0
-DEMO_REQUEST_TIMEOUT_SECONDS = 30.0
-DEMO_POLL_INTERVAL_SECONDS = 0.005
-
-
 def _platform_label(system: str, architecture: str) -> str:
     return f"{_DISPLAY_OS.get(system, system)} {architecture}"
 
 
-class _DemoStartGate:
-    """Hold a demonstration source process at one safe point.
-
-    The gate publishes a readiness document once the VM reaches
-    `hold_safe_point`, then blocks that safe point until the demonstration
-    controller creates the start file. The controller only creates it after it
-    has seen the real freeze request appear on disk, so the source cannot run
-    to completion before the request exists. Every safe point, including the
-    held one, still runs the unmodified session callback.
-    """
-
-    def __init__(
-        self,
-        sync_dir: Path,
-        hold_safe_point: int,
-        controller: SessionController,
-    ) -> None:
-        self.sync_dir = sync_dir
-        self.hold_safe_point = hold_safe_point
-        self.controller = controller
-        self.ready_path = sync_dir / "ready.json"
-        self.start_path = sync_dir / "start"
-        self.released = False
-
-    def __call__(self, vm: VirtualMachine) -> None:
-        if not self.released and vm.safe_points_executed >= self.hold_safe_point:
-            self._signal_ready(vm)
-            self._await_start()
-            self.released = True
-        self.controller.on_safe_point(vm)
-
-    def _signal_ready(self, vm: VirtualMachine) -> None:
-        payload = {
-            "session_id": self.controller.session_id,
-            "pid": os.getpid(),
-            "request_path": str(self.controller.request_path),
-            "safe_points_executed": vm.safe_points_executed,
-        }
-        temporary = self.ready_path.with_name(
-            f".{self.ready_path.name}.{uuid.uuid4().hex}.tmp"
-        )
-        try:
-            with temporary.open("w", encoding="utf-8") as handle:
-                json.dump(payload, handle, sort_keys=True)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, self.ready_path)
-        except OSError as exc:
-            try:
-                temporary.unlink()
-            except FileNotFoundError:
-                pass
-            raise ContinuumError(
-                f"cannot publish demo readiness to {self.ready_path}: {exc}"
-            ) from exc
-
-    def _await_start(self) -> None:
-        deadline = time.monotonic() + DEMO_START_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            if self.start_path.exists():
-                return
-            time.sleep(DEMO_POLL_INTERVAL_SECONDS)
-        raise ContinuumError(
-            "demo start gate was not released within "
-            f"{DEMO_START_TIMEOUT_SECONDS:.0f}s; expected the controller to "
-            f"create {self.start_path}"
-        )
-
-
-def _demo_safe_point_callback(controller: SessionController):
-    sync = os.environ.get(DEMO_SYNC_ENV)
-    if not sync:
-        return controller.on_safe_point
-    sync_dir = Path(sync)
-    if not sync_dir.is_dir():
-        raise ContinuumError(
-            f"{DEMO_SYNC_ENV} is not an existing directory: {sync_dir}"
-        )
-    raw = os.environ.get(DEMO_HOLD_SAFE_POINT_ENV, "")
-    try:
-        hold_safe_point = int(raw)
-    except ValueError as exc:
-        raise ContinuumError(
-            f"{DEMO_HOLD_SAFE_POINT_ENV} must be an integer, got {raw!r}"
-        ) from exc
-    if hold_safe_point < 1:
-        raise ContinuumError(
-            f"{DEMO_HOLD_SAFE_POINT_ENV} must be at least 1, got {hold_safe_point}"
-        )
-    return _DemoStartGate(sync_dir, hold_safe_point, controller)
+DEMO_READY_TIMEOUT_SECONDS = 120.0
+DEMO_START_TIMEOUT_SECONDS = 120.0
+DEMO_REQUEST_TIMEOUT_SECONDS = 30.0
+DEMO_POLL_INTERVAL_SECONDS = 0.005
 
 
 def _format_compatible_targets() -> tuple[str, ...]:
@@ -286,7 +189,7 @@ def _run(args: argparse.Namespace) -> int:
         raise ContinuumError(f"cannot read {path}: {exc}") from exc
     ir = compile_source(source, str(path))
     controller = SessionController(source, str(path))
-    safe_point_callback = _demo_safe_point_callback(controller)
+    safe_point_callback = harness_safe_point_callback(controller)
     controller.start()
     vm = VirtualMachine(
         ir,
@@ -517,8 +420,8 @@ def _demo(args: argparse.Namespace) -> int:
     ready_path = sync_dir / "ready.json"
     source_environment = {
         **environment,
-        DEMO_SYNC_ENV: str(sync_dir),
-        DEMO_HOLD_SAFE_POINT_ENV: str(DEMO_HOLD_SAFE_POINT),
+        SYNC_ENV: str(sync_dir),
+        HOLD_SAFE_POINT_ENV: str(DEFAULT_HOLD_SAFE_POINT),
     }
 
     print("Same-machine continuation demonstration")
@@ -583,7 +486,7 @@ def _demo(args: argparse.Namespace) -> int:
                     "start gate did not hold the workload"
                 )
             print("Freeze request published; releasing the held safe point")
-            _release_demo_start(start_path)
+            harness_release(sync_dir)
 
             try:
                 freeze_stdout, freeze_stderr = freeze_process.communicate(
@@ -694,7 +597,7 @@ def _demo(args: argparse.Namespace) -> int:
     target_progress = _demo_progress(after)
     identity_count, final_count = _demo_marker_counts(combined)
     comparison = {
-        "hold_safe_point": DEMO_HOLD_SAFE_POINT,
+        "hold_safe_point": DEFAULT_HOLD_SAFE_POINT,
         "source_safe_points_at_hold": ready["safe_points_executed"],
         "freeze_request_published_before_release": request_published,
         "source_alive_when_request_published": source_alive_at_publication,
@@ -724,8 +627,8 @@ def _demo(args: argparse.Namespace) -> int:
     )
     if not source_progress:
         raise ContinuumError(
-            f"demo source froze at safe point {DEMO_HOLD_SAFE_POINT} without "
-            "producing progress output; re-measure DEMO_HOLD_SAFE_POINT "
+            f"demo source froze at safe point {DEFAULT_HOLD_SAFE_POINT} without "
+            "producing progress output; re-measure DEFAULT_HOLD_SAFE_POINT "
             f"against the demonstration workload, see {comparison_path}"
         )
     if not all(
@@ -812,7 +715,7 @@ def _wait_for_demo_ready(
     raise ContinuumError(
         "timed out after "
         f"{DEMO_READY_TIMEOUT_SECONDS:.0f}s waiting for the demo source to "
-        f"reach safe point {DEMO_HOLD_SAFE_POINT} and publish {ready_path}"
+        f"reach safe point {DEFAULT_HOLD_SAFE_POINT} and publish {ready_path}"
     )
 
 

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from continuum.compiler import compile_source
 from continuum.errors import ContinuumError, FrozenExecution
 from continuum.session import (
+    PublicationPending,
     read_published_json,
     SessionController,
     _create_json_exclusive,
@@ -268,7 +269,9 @@ class PublishedDocumentReadTests(unittest.TestCase):
                 return real(self, *args, **kwargs)
 
             with mock.patch.object(Path, "read_text", flaky):
-                self.assertEqual(read_published_json(path), {"ok": True})
+                self.assertEqual(
+                    read_published_json(path, timeout=5.0), {"ok": True}
+                )
             self.assertEqual(len(attempts), 3)
 
     def test_gives_up_after_the_timeout(self):
@@ -280,7 +283,7 @@ class PublishedDocumentReadTests(unittest.TestCase):
                 raise PermissionError(13, "locked")
 
             with mock.patch.object(Path, "read_text", always_locked):
-                with self.assertRaises(PermissionError):
+                with self.assertRaises(PublicationPending):
                     read_published_json(path, timeout=0.05)
 
     def test_malformed_document_is_not_retried(self):

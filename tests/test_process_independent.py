@@ -8,6 +8,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from continuum._harness import (
+    environment_for as harness_environment,
+    release as harness_release,
+    wait_for_ready as harness_wait_for_ready,
+    wait_for_request as harness_wait_for_request,
+)
+
 
 class ProcessIndependentTests(unittest.TestCase):
     def test_source_exits_and_new_process_resumes_without_restart(self):
@@ -19,6 +26,9 @@ class ProcessIndependentTests(unittest.TestCase):
             environment = os.environ.copy()
             environment["CONTINUUM_HOME"] = str(root / "home")
             environment["PYTHONPATH"] = str(repository)
+            sync_dir = Path(temporary) / "sync"
+            sync_dir.mkdir()
+            source_environment = harness_environment(sync_dir, environment)
             source = subprocess.Popen(
                 [
                     sys.executable,
@@ -29,7 +39,7 @@ class ProcessIndependentTests(unittest.TestCase):
                     "300000",
                 ],
                 cwd=repository,
-                env=environment,
+                env=source_environment,
                 text=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -41,7 +51,12 @@ class ProcessIndependentTests(unittest.TestCase):
             self.assertTrue(session_line.startswith("Continuum session: "))
             session_id = session_line.split(": ", 1)[1]
             self.assertEqual(source.stdout.readline().strip(), "START_SENTINEL")
-            freeze = subprocess.run(
+            # Hold at a real safe point instead of racing the workload: the
+            # sentinel says work started, not that the source will still be
+            # alive when the freeze request lands.
+            ready = harness_wait_for_ready(source, sync_dir)
+            request_path = Path(ready["request_path"])
+            freeze = subprocess.Popen(
                 [
                     sys.executable,
                     "-m",
@@ -54,10 +69,14 @@ class ProcessIndependentTests(unittest.TestCase):
                 cwd=repository,
                 env=environment,
                 text=True,
-                capture_output=True,
-                timeout=30,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
-            self.assertEqual(freeze.returncode, 0, freeze.stderr)
+            harness_wait_for_request(request_path, source, freeze)
+            self.assertIsNone(source.poll(), "source died before release")
+            harness_release(sync_dir)
+            freeze_stdout, freeze_stderr = freeze.communicate(timeout=120)
+            self.assertEqual(freeze.returncode, 0, freeze_stderr or freeze_stdout)
             source_pid = source.pid
             source.wait(timeout=10)
             self.assertEqual(source.returncode, 0)

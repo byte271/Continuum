@@ -12,10 +12,10 @@ import uuid
 from pathlib import Path
 
 from continuum.session import read_published_json
-from continuum.cli import (
-    DEMO_HOLD_SAFE_POINT,
-    DEMO_HOLD_SAFE_POINT_ENV,
-    DEMO_SYNC_ENV,
+from continuum._harness import (
+    DEFAULT_HOLD_SAFE_POINT,
+    HOLD_SAFE_POINT_ENV,
+    SYNC_ENV,
 )
 
 
@@ -99,8 +99,8 @@ class AdversarialRestartTests(unittest.TestCase):
         cls.sync.mkdir()
         source_environment = {
             **environment,
-            DEMO_SYNC_ENV: str(cls.sync),
-            DEMO_HOLD_SAFE_POINT_ENV: str(DEMO_HOLD_SAFE_POINT),
+            SYNC_ENV: str(cls.sync),
+            HOLD_SAFE_POINT_ENV: str(DEFAULT_HOLD_SAFE_POINT),
         }
 
         auditor = subprocess.Popen(

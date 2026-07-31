@@ -9,16 +9,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from continuum import cli
-from continuum.cli import (
-    DEMO_HOLD_SAFE_POINT,
-    DEMO_HOLD_SAFE_POINT_ENV,
-    DEMO_SYNC_ENV,
-    _demo_final_hash,
-    _demo_marker_counts,
-    _demo_safe_point_callback,
-    _DemoStartGate,
+from continuum import _harness
+from continuum._harness import (
+    DEFAULT_HOLD_SAFE_POINT,
+    HOLD_SAFE_POINT_ENV,
+    SYNC_ENV,
+    HoldGate,
+    safe_point_callback as harness_safe_point_callback,
 )
+from continuum.cli import _demo_final_hash, _demo_marker_counts
 from continuum.errors import ContinuumError
 from continuum.session import read_published_json
 
@@ -31,7 +30,7 @@ DEMO_REPETITIONS = 3
 def _demo_environment(home: Path) -> dict[str, str]:
     environment = {**os.environ, "CONTINUUM_HOME": str(home)}
     environment.pop("PYTHONPATH", None)
-    for name in (DEMO_SYNC_ENV, DEMO_HOLD_SAFE_POINT_ENV):
+    for name in (SYNC_ENV, HOLD_SAFE_POINT_ENV):
         environment.pop(name, None)
     return environment
 
@@ -90,9 +89,9 @@ class CliDemoTests(unittest.TestCase):
         self.assertTrue(comparison["freeze_request_published_before_release"])
         self.assertTrue(comparison["source_alive_when_request_published"])
         self.assertTrue(comparison["source_made_progress_before_freeze"])
-        self.assertEqual(comparison["hold_safe_point"], DEMO_HOLD_SAFE_POINT)
+        self.assertEqual(comparison["hold_safe_point"], DEFAULT_HOLD_SAFE_POINT)
         self.assertGreaterEqual(
-            comparison["source_safe_points_at_hold"], DEMO_HOLD_SAFE_POINT
+            comparison["source_safe_points_at_hold"], DEFAULT_HOLD_SAFE_POINT
         )
         self.assertIsNotNone(comparison["source_progress_last"])
         self.assertIsNotNone(comparison["target_progress_first"])
@@ -182,8 +181,8 @@ class CliDemoTests(unittest.TestCase):
             gated_stdout = root / "gated-stdout.log"
             environment = {
                 **_demo_environment(root / "gated-home"),
-                DEMO_SYNC_ENV: str(sync_dir),
-                DEMO_HOLD_SAFE_POINT_ENV: str(DEMO_HOLD_SAFE_POINT),
+                SYNC_ENV: str(sync_dir),
+                HOLD_SAFE_POINT_ENV: str(DEFAULT_HOLD_SAFE_POINT),
             }
 
             with gated_stdout.open("w", encoding="utf-8") as handle:
@@ -209,7 +208,7 @@ class CliDemoTests(unittest.TestCase):
                     ready = read_published_json(ready_path)
                     self.assertEqual(ready["pid"], gated.pid)
                     self.assertGreaterEqual(
-                        ready["safe_points_executed"], DEMO_HOLD_SAFE_POINT
+                        ready["safe_points_executed"], DEFAULT_HOLD_SAFE_POINT
                     )
 
                     # Well past the time a complete ungated workload needs.
@@ -240,8 +239,8 @@ class CliDemoTests(unittest.TestCase):
             request_path=Path("unused"),
         )
         with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop(DEMO_SYNC_ENV, None)
-            callback = _demo_safe_point_callback(controller)
+            os.environ.pop(SYNC_ENV, None)
+            callback = harness_safe_point_callback(controller)
         self.assertIs(callback, controller.on_safe_point)
 
     def test_start_gate_rejects_an_invalid_hold_point(self):
@@ -254,13 +253,13 @@ class CliDemoTests(unittest.TestCase):
             with mock.patch.dict(
                 os.environ,
                 {
-                    DEMO_SYNC_ENV: temporary,
-                    DEMO_HOLD_SAFE_POINT_ENV: "not-a-number",
+                    SYNC_ENV: temporary,
+                    HOLD_SAFE_POINT_ENV: "not-a-number",
                 },
             ):
                 with self.assertRaises(ContinuumError) as caught:
-                    _demo_safe_point_callback(controller)
-        self.assertIn(DEMO_HOLD_SAFE_POINT_ENV, str(caught.exception))
+                    harness_safe_point_callback(controller)
+        self.assertIn(HOLD_SAFE_POINT_ENV, str(caught.exception))
 
     def test_start_gate_times_out_with_a_useful_error(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -270,14 +269,14 @@ class CliDemoTests(unittest.TestCase):
                 session_id="cont-000000000000",
                 request_path=sync_dir / "request.json",
             )
-            gate = _DemoStartGate(sync_dir, 1, controller)
-            vm = SimpleNamespace(safe_points_executed=1)
-            with mock.patch.object(cli, "DEMO_START_TIMEOUT_SECONDS", 0.05):
+            gate = HoldGate(sync_dir, 1, controller)
+            vm = SimpleNamespace(safe_points_executed=1, instructions_executed=42)
+            with mock.patch.object(_harness, "START_TIMEOUT_SECONDS", 0.05):
                 with self.assertRaises(ContinuumError) as caught:
                     gate(vm)
 
             message = str(caught.exception)
-            self.assertIn("start gate", message)
+            self.assertIn("harness hold", message)
             self.assertIn(str(sync_dir / "start"), message)
             # Readiness is still published, so a controller can diagnose it.
             ready = json.loads(
