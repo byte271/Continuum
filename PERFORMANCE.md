@@ -1,16 +1,70 @@
 # Performance
 
-> **These numbers are stale and must not be quoted for the current runtime.**
-> Every measurement on this page was taken at Continuum **0.1.1.dev0** against
-> **IR 0.2**. The shipping runtime is 0.3.0 against IR 0.4, which added
-> exception handling, full argument binding, closure cells, and VM-owned
-> classes — all of which touch the interpreter loop. No measurement has been
-> repeated since. Treat the slowdown figures as historical, not current.
->
-> `benchmarks/measure.py` additionally imports the POSIX-only `resource`
-> module at import time, so it cannot run on Windows at all, and no workflow
-> executes it, so performance can regress silently between releases.
-> Re-measuring on the current runtime is tracked in `ROADMAP.md`.
+## Current measurements (0.4.0a1, IR 0.4, execution ABI 1.0, plan format 1.0)
+
+Measured 2026-07-31 on one Linux x86_64 host with
+`benchmarks/measure_migration.py`, 20,000 workload iterations, 7 repetitions,
+medians. The workload carries four active frames, a closure cell, a shared
+mutable reference, a reference cycle, and VM-owned class and instance state.
+
+Raw results:
+`benchmarks/results/migration-linux-x86_64-python3.12.13-2026-07-31.json` and
+`benchmarks/results/migration-linux-x86_64-python3.13.14-2026-07-31.json`.
+
+| Figure | CPython 3.12.13 | CPython 3.13.14 |
+| --- | ---: | ---: |
+| Compile overhead (source to IR) | 1.0 ms | 1.0 ms |
+| Continuum run (800,087 instructions) | 0.565 s | 0.618 s |
+| Same program under CPython | 3.9 ms | 3.0 ms |
+| **Slowdown vs. CPython** | **144x** | **206x** |
+| Safe-point callback overhead | +0.2% | within noise |
+| Freeze latency | 7.0 ms | 6.7 ms |
+| Image size | 12,296 B | 12,308 B |
+| Migration-plan generation | 9.7 ms | 13.8 ms |
+| Migration-plan verification | 11.2 ms | 16.7 ms |
+| Migration-plan size | 4,547 B | 4,549 B |
+| Resume latency (restore only) | 2.0 ms | 2.0 ms |
+| Resume + apply migration | 2.0 ms | 2.2 ms |
+
+### Reading these honestly
+
+**The slowdown is large and is the headline cost.** Continuum interprets its
+own IR in Python, so a two-order-of-magnitude penalty against CPython running
+the same source is expected and is not a regression to be explained away. It is
+the price of execution state that can be serialized and moved. Nothing here
+makes Continuum appropriate for hot loops.
+
+The 3.13.14 slowdown ratio is worse than 3.12.13 in both directions at once:
+Continuum is slower there *and* CPython is faster there. Both effects are real
+and both are one host, one workload.
+
+**Safe points are effectively free.** Attaching a live session's callback costs
+under a percent, and on 3.13.14 the difference sits inside run-to-run noise.
+Checkpointing is cheap to leave enabled; that is a deliberate design outcome,
+since a safe point that cost real time would push users to disable it.
+
+**Migration costs are dominated by verification, on purpose.** Verifying a plan
+costs slightly *more* than generating it, because verification does not trust
+the plan: it independently re-derives the whole mapping from the image and the
+plan's own new source and compares. Paying roughly double to refuse a tampered
+plan is the intended trade.
+
+**Applying a migration is nearly free at resume time.** All the analysis happens
+in `plan-upgrade` and `verify-upgrade`; `apply_plan` only rewrites frame
+positions and swaps the IR, which is why resume with and without a migration are
+indistinguishable at this workload size.
+
+### Scope of these numbers
+
+One host, one workload, one architecture. Nothing on this page was measured on
+macOS arm64 or Windows x86_64, and no figure should be quoted for those hosts.
+No workflow runs these benchmarks, so performance can still regress silently
+between releases; wiring them into CI is not done.
+
+## Historical measurements (0.1.1.dev0, IR 0.2)
+
+> The section below predates the current runtime by two IR revisions and is
+> retained as history. Do not quote it for 0.4.0a1.
 
 Correctness remains the priority. These are raw local measurements from one
 Linux x86_64 environment, not portable targets.

@@ -1,0 +1,61 @@
+{
+  "architecture": "x86_64",
+  "compile": {
+    "median_seconds": 0.001017120999904364,
+    "min_seconds": 0.0008943349998844496,
+    "samples": 7
+  },
+  "continuum_run": {
+    "median_seconds": 0.6178914410002108,
+    "min_seconds": 0.6110722779999378,
+    "samples": 7
+  },
+  "continuum_run_with_safe_point_callback": {
+    "median_seconds": 0.6083072669998728,
+    "min_seconds": 0.5867451320000328,
+    "samples": 7
+  },
+  "continuum_version": "0.4.0a1",
+  "cpython_run": {
+    "median_seconds": 0.0030025990001831815,
+    "min_seconds": 0.002918591000025117,
+    "samples": 7
+  },
+  "execution_abi_version": "1.0",
+  "freeze": {
+    "median_seconds": 0.006662192000021605,
+    "min_seconds": 0.006343883999988975,
+    "samples": 7
+  },
+  "image_bytes": 12308,
+  "instructions_executed": 800087,
+  "iterations": 20000,
+  "migration_plan_bytes": 4549,
+  "migration_plan_format": "1.0",
+  "os": "Linux",
+  "plan_upgrade": {
+    "median_seconds": 0.013840652999988379,
+    "min_seconds": 0.010763786000097753,
+    "samples": 7
+  },
+  "python_version": "3.13.14",
+  "repetitions": 7,
+  "resume": {
+    "median_seconds": 0.0019913699998141965,
+    "min_seconds": 0.0018802689999120048,
+    "samples": 7
+  },
+  "resume_with_migration": {
+    "median_seconds": 0.0021686420000150974,
+    "min_seconds": 0.0020108830001390743,
+    "samples": 7
+  },
+  "safe_point_callback_overhead_ratio": 0.984,
+  "safe_points_executed": 100014,
+  "slowdown_vs_cpython": 205.8,
+  "verify_upgrade": {
+    "median_seconds": 0.016650386000037543,
+    "min_seconds": 0.013097774000016216,
+    "samples": 7
+  }
+}
