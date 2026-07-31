@@ -78,6 +78,53 @@ class LocalNameCollector(ast.NodeVisitor):
             self.names.add(node.id)
 
 
+def statement_shape(node: ast.stmt) -> str:
+    """A structural digest of one statement, independent of where it sits.
+
+    Line numbers are excluded, so moving code does not change identity. For a
+    compound statement only the *header* is digested -- a `while` is described
+    by its test, a `for` by its target and iterable, a `try` by its handler
+    matchers -- so editing a loop body does not change the identity of the loop
+    that body belongs to. That separation is what lets an active loop keep its
+    identity while the code inside it changes.
+    """
+
+    if isinstance(node, ast.While):
+        parts = ["While", ast.dump(node.test, annotate_fields=False)]
+    elif isinstance(node, ast.For):
+        parts = [
+            "For",
+            ast.dump(node.target, annotate_fields=False),
+            ast.dump(node.iter, annotate_fields=False),
+        ]
+    elif isinstance(node, ast.If):
+        parts = ["If", ast.dump(node.test, annotate_fields=False)]
+    elif isinstance(node, ast.Try):
+        parts = ["Try"]
+        for handler in node.handlers:
+            parts.append(
+                "except:"
+                + (
+                    "*"
+                    if handler.type is None
+                    else ast.dump(handler.type, annotate_fields=False)
+                )
+                + f" as {handler.name or ''}"
+            )
+        parts.append(f"finally:{bool(node.finalbody)}")
+        parts.append(f"else:{bool(node.orelse)}")
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        # A nested definition is identified by its signature, not its body, so
+        # changing what an inactive nested function does leaves the statement
+        # that defines it in place.
+        parts = ["Def", node.name, ast.dump(node.args, annotate_fields=False)]
+    elif isinstance(node, ast.ClassDef):
+        parts = ["Class", node.name]
+    else:
+        parts = [type(node).__name__, ast.dump(node, annotate_fields=False)]
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:32]
+
+
 def collect_local_names(body: list[ast.stmt], parameters: list[str]) -> set[str]:
     collector = LocalNameCollector(parameters)
     for statement in body:
@@ -219,6 +266,13 @@ class FunctionCompiler:
         self.cellvars = set(scope.cellvars) if scope else set()
         self.freevars = sorted(scope.freevars) if scope else []
         self.code: list[dict[str, Any]] = []
+        # Semantic site per emitted instruction, parallel to `code`. This is a
+        # side table: it never enters the IR, so annotating costs no format
+        # change and an image written before this existed can still be
+        # annotated by recompiling its stored source. See continuum/semantics.py.
+        self.sites: list[tuple[Any, ...]] = []
+        self.region_path: list[tuple[str, str, int, str]] = []
+        self.statement_key: tuple[str, str, int] | None = None
         self.loops: list[LoopContext] = []
         # Enclosing protected regions in this function. `protect_depth` counts
         # every active control block; `finally_depth` counts only those whose
@@ -242,6 +296,7 @@ class FunctionCompiler:
         if arg is not None:
             instruction["arg"] = arg
         self.code.append(instruction)
+        self.sites.append((tuple(self.region_path), self.statement_key))
         return len(self.code) - 1
 
     def patch(self, index: int, target: int) -> None:
@@ -251,8 +306,29 @@ class FunctionCompiler:
         self.emit("SAFEPOINT", line=getattr(node, "lineno", 0))
 
     def statements(self, body: list[ast.stmt]) -> None:
+        # Key each statement by its own shape and by how many statements of
+        # that same shape precede it in this body, rather than by its child
+        # index. Inserting a statement of any *different* shape therefore does
+        # not perturb the identity of the statements around it, which is what
+        # makes "insert code after the resume point" a mappable edit. Two
+        # identically shaped siblings do shift each other's occurrence index,
+        # and that ambiguity is reported rather than resolved by guessing.
+        occurrences: dict[str, int] = {}
+        previous = self.statement_key
         for statement in body:
+            shape = statement_shape(statement)
+            index = occurrences.get(shape, 0)
+            occurrences[shape] = index + 1
+            self.statement_key = (type(statement).__name__, shape, index)
             self.statement(statement)
+        self.statement_key = previous
+
+    def enter_region(self, part: str) -> None:
+        key = self.statement_key or ("", "", 0)
+        self.region_path.append((key[0], key[1], key[2], part))
+
+    def exit_region(self) -> None:
+        self.region_path.pop()
 
     def statement(self, node: ast.stmt) -> None:
         line = getattr(node, "lineno", 0)
@@ -282,7 +358,9 @@ class FunctionCompiler:
             if node.orelse:
                 end_jump = self.emit("JUMP", -1, line)
                 self.patch(false_jump, len(self.code))
+                self.enter_region("orelse")
                 self.statements(node.orelse)
+                self.exit_region()
                 self.patch(end_jump, len(self.code))
             else:
                 self.patch(false_jump, len(self.code))
@@ -292,12 +370,16 @@ class FunctionCompiler:
             exit_jump = self.emit("JUMP_IF_FALSE", -1, line)
             context = LoopContext(start, [], 0)
             self.loops.append(context)
+            self.enter_region("body")
             self.statements(node.body)
             self.emit("SAFEPOINT", line=line)
             self.emit("JUMP", start, line)
+            self.exit_region()
             exhausted = len(self.code)
             self.patch(exit_jump, exhausted)
+            self.enter_region("orelse")
             self.statements(node.orelse)
+            self.exit_region()
             end = len(self.code)
             for jump in context.breaks:
                 self.patch(jump, end)
@@ -311,12 +393,16 @@ class FunctionCompiler:
             self.emit("SAFEPOINT", line=line)
             context = LoopContext(start, [], 1)
             self.loops.append(context)
+            self.enter_region("body")
             self.statements(node.body)
             self.emit("SAFEPOINT", line=line)
             self.emit("JUMP", start, line)
+            self.exit_region()
             exhausted = len(self.code)
             self.patch(exit_jump, exhausted)
+            self.enter_region("orelse")
             self.statements(node.orelse)
+            self.exit_region()
             end = len(self.code)
             for jump in context.breaks:
                 self.patch(jump, end)
@@ -448,7 +534,9 @@ class FunctionCompiler:
         setup = self.emit("SETUP_FINALLY", -1, node.lineno)
         self.protect_depth += 1
         self.finally_depth += 1
+        self.enter_region("try")
         self.statements(body)
+        self.exit_region()
         self.finally_depth -= 1
         self.protect_depth -= 1
         self.emit("POP_BLOCK", line=node.lineno)
@@ -458,17 +546,23 @@ class FunctionCompiler:
         self.patch(setup, handler)
         self.patch(jump, handler)
         self.emit("SAFEPOINT", line=node.lineno)
+        self.enter_region("finally")
         self.statements(node.finalbody)
+        self.exit_region()
         self.emit("END_FINALLY", line=node.lineno)
         self.safe(node)
 
     def compile_try_except(self, node: ast.Try) -> None:
         setup = self.emit("SETUP_EXCEPT", -1, node.lineno)
         self.protect_depth += 1
+        self.enter_region("try")
         self.statements(node.body)
+        self.exit_region()
         self.protect_depth -= 1
         self.emit("POP_BLOCK", line=node.lineno)
+        self.enter_region("orelse")
         self.statements(node.orelse)
+        self.exit_region()
         normal_jump = self.emit("JUMP", -1, node.lineno)
 
         # Handler dispatch. On entry the live exception is the top of stack.
@@ -476,7 +570,7 @@ class FunctionCompiler:
         self.emit("SAFEPOINT", line=node.lineno)
         end_jumps: list[int] = []
         saw_bare = False
-        for handler in node.handlers:
+        for handler_index, handler in enumerate(node.handlers):
             line = handler.lineno
             if saw_bare:
                 self.unsupported(handler, "except clause after a bare except")
@@ -494,7 +588,9 @@ class FunctionCompiler:
                 self.store_name(handler.name, line)
                 self.local_names.add(handler.name)
             self.emit("SAFEPOINT", line=line)
+            self.enter_region(f"handler:{handler_index}")
             self.statements(handler.body)
+            self.exit_region()
             if handler.name is not None:
                 # CPython unbinds the handler name when the block exits.
                 self.emit(
@@ -806,6 +902,10 @@ class ProgramCompiler:
         self.source = source
         self.source_name = source_name
         self.functions: dict[str, dict[str, Any]] = {}
+        # function_id -> list of semantic sites, parallel to that function's
+        # `code`. Kept beside the IR rather than inside it, so enabling
+        # annotation cannot change a single byte of a produced image.
+        self.sites: dict[str, list[Any]] = {}
         self.imports: set[str] = set()
 
     def compile(self) -> dict[str, Any]:
@@ -843,6 +943,7 @@ class ProgramCompiler:
             "local_names": sorted(module.local_names),
             "code": module.code,
         }
+        self.sites["__module__"] = module.sites
         return {
             "ir_version": IR_VERSION,
             "source_name": self.source_name,
@@ -917,8 +1018,25 @@ class ProgramCompiler:
             "local_names": sorted(local_names),
             "code": compiler.code,
         }
+        self.sites[function_id] = compiler.sites
         return function_id, list(compiler.freevars)
 
 
 def compile_source(source: str, source_name: str) -> dict[str, Any]:
     return ProgramCompiler(source, source_name).compile()
+
+
+def compile_with_sites(
+    source: str, source_name: str
+) -> tuple[dict[str, Any], dict[str, list[Any]]]:
+    """Compile, and also return the semantic site of every instruction.
+
+    The IR returned here is identical to `compile_source`'s -- the sites live in
+    a separate table. That is what allows an image written by an older runtime,
+    with no notion of semantic identity, to be annotated after the fact by
+    recompiling the source it already carries.
+    """
+
+    compiler = ProgramCompiler(source, source_name)
+    ir = compiler.compile()
+    return ir, compiler.sites
