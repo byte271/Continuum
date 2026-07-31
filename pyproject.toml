@@ -4,15 +4,20 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "continuum-state"
-version = "0.3.1"
+version = "0.4.0a1"
 description = "Portable continuation images for a controlled pure-Python runtime"
 readme = "README.md"
-requires-python = "==3.12.13"
+# Coarse install-time filter only. The authoritative gate is the exact
+# allowlist in continuum/abi.py (VERIFIED_PYTHON_VERSIONS): an interpreter that
+# satisfies this specifier but has not been verified end to end is still
+# refused at runtime. Tests enforce both halves of that contract.
+requires-python = ">=3.12.13,<3.14"
 license = {text = "MIT"}
 authors = [{name = "Continuum contributors"}]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: POSIX",
   "Operating System :: POSIX :: Linux",
   "Operating System :: MacOS :: MacOS X",

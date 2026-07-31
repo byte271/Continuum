@@ -1,5 +1,97 @@
 # Compatibility
 
+## The execution compatibility contract (container format 0.2)
+
+Container format 0.2 images carry an `execution_contract` block that separates
+the axes the 0.1 container collapsed into two fields. Each is versioned
+independently:
+
+| Axis | Meaning | Gates a restore? |
+| --- | --- | --- |
+| `container_format_version` | archive layout | yes, exact |
+| `graph_codec_version` | object-graph encoding | yes, exact |
+| `ir_version` | instruction set the frames index | yes, exact |
+| `execution_abi_version` | meaning of frame, binding, stack, and control state | yes, exact |
+| `creator.continuum_version` | which Continuum wrote the image | no — provenance |
+| `creator.python_version` | which interpreter wrote the image | no — provenance |
+| `target.runtime_implementations` | which runtimes may restore it | yes |
+| `target.python_versions` | interpreters the creator accepts | yes |
+| `target.required_capabilities` | named features the target must implement | yes |
+
+Creator identity is recorded but does not gate the restore. What gates it is
+the execution ABI, the capability set, and the interpreter allowlist.
+
+The interpreter decision has **two independent gates**, and both must pass:
+
+1. the running interpreter appears in the image's `target.python_versions`;
+2. the running interpreter appears in this runtime's
+   `abi.VERIFIED_PYTHON_VERSIONS`.
+
+The second gate means an image cannot widen what this runtime accepts by
+asserting a version nobody verified. Membership in `VERIFIED_PYTHON_VERSIONS`
+requires a green native cross-Python proof run, so it is a record of evidence
+rather than an intention.
+
+The allowlist is **exact and never a range**. `3.13.0` and `3.12.14` are
+refused exactly as firmly as `3.9`, even though both sit inside the interval the
+verified versions span. Packaging metadata (`requires-python`) is necessarily
+coarser than an exact allowlist; it is an install-time filter only, and the
+runtime allowlist is the authority. Both halves of that split are tested.
+
+Every refusal carries a stable machine-readable reason code, so compatibility
+policy is asserted on directly rather than by matching prose.
+
+### Format 0.1 images
+
+Format 0.1 images carry no contract, so nothing in them would justify a
+capability-based decision. They keep their original rule — exact creator Python
+*and* exact creator Continuum version — and their refusal messages name the
+format version and state that re-freezing under 0.2 is what provides
+cross-Python restore. An image cannot obtain the 0.2 policy by declaring 0.1
+while carrying contract fields, nor the reverse.
+
+## Cross-Python differential corpus
+
+The corpus below measures *unchanged-source* behavior on one interpreter. A
+separate paired suite measures whether live execution state survives a change
+of interpreter: `validation/cross_python/differential.py` freezes each program
+at safe points spread across its execution, deeply verifies the image without
+executing it, restores under the other interpreter, and compares against an
+independently run uninterrupted control.
+
+The comparison covers the logical frame chain, resume positions and opcodes,
+locals, lexical cells, operand stacks, control blocks, pending finally state,
+module globals, module RNG state, `random.Random` state, file offsets, and
+instruction and safe-point counters. Object identity is compared structurally:
+each object is labelled on first visit and revisits emit a back-reference, so
+shared references and reference cycles are part of the compared value.
+
+Measured on native Linux x86_64, CPython 3.12.13 → 3.13.14, at commit
+`40cc9dd` (Actions run 30658976309). Raw result:
+`compatibility/results/cross-python-3.12.13-to-3.13.14-linux-x86_64-2026-07-31.json`.
+
+| Classification | Cases |
+| --- | ---: |
+| Accepted and correct | 189 |
+| Explicitly refused | 0 |
+| Unsupported by the language frontend | 15 |
+| Infrastructure failure | 0 |
+| **Silent mismatch** | **0** |
+| Total | 204 |
+
+Correctness among accepted cases: **100%**. Refused and frontend-unsupported
+cases are reported separately and are not folded into that rate. The 15
+frontend cases are 10 corpus programs the compiler does not accept at all;
+they are a language-coverage gap, not a portability result.
+
+Live frame depth up to 16 was exercised, across 11 distinct frame chains and
+40 programs.
+
+A suite reporting zero mismatches is only meaningful if it can detect one, so
+`tests/test_cross_python_differential.py` corrupts each compared dimension in
+turn — including replaying a completed action and restarting from program
+entry — and asserts every corruption is caught.
+
 ## Method
 
 The initial corpus contains 50 unchanged, self-contained, MIT-licensed

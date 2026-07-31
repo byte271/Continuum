@@ -32,7 +32,7 @@ therefore cannot succeed across hosts with different path forms.
 Resume rejects an image unless all of these checks pass:
 
 - format 0.1 and current IR 0.4 schema validation;
-- Continuum runtime implementation and exact runtime version `0.3.1`;
+- Continuum runtime implementation. Container format 0.2 images no longer require an exact runtime version `0.4.0a1`; they require the execution ABI and the capability set. Container format 0.1 images still require it exactly;
 - CPython 3.12.13;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
@@ -65,7 +65,9 @@ implementation and can still have platform-specific behavior.
 | Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
 | IR 0.4/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30592158078 at commit `21f7b2e`, carrying a class, an instance, a live handler, variadic bindings, and a shared closure cell |
 | Release IR 0.4/runtime 0.3.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30596179154 at commit `023f74c` |
+| Container format 0.2/IR 0.4/execution ABI 1.0/runtime 0.4.0a1 | Native Linux x86_64, **CPython 3.12.13** | Native Apple Silicon macOS arm64, **CPython 3.13.14** | **verified**; Actions run 30658976309 at commit `40cc9dd`, image SHA-256 `3b564d9d37a9353ebb22027a4b3597d30fc2eef1272c3a220fc7f65e3d939824` identical at capture, on arrival, and after restore; driven entirely through the public CLI; 4 live frames; 0 completed actions repeated |
 | Any revision | Native Windows x86_64 | Any other platform | unverified; no workflow generates or resumes a cross-host Windows image |
+| Container format 0.2 | Any CPython outside `abi.VERIFIED_PYTHON_VERSIONS` | Any | unverified and refused before execution; the allowlist is exact, so 3.13.0 and 3.12.14 are refused as firmly as 3.9 |
 | Any revision | Any other platform | Native Windows x86_64 | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Linux x86_64 host | Second native Linux x86_64 environment | unverified |
 | Any revision | Any other native cross-architecture pair | Any | unverified |

@@ -33,7 +33,10 @@ See `LANGUAGE_SUPPORT.md` for the test-backed feature-by-feature matrix.
 
 ## Execution model
 
-- CPython 3.12.13 exactly;
+- CPython 3.12.13 or 3.13.14, exactly. The allowlist is exact and never a
+  range: an interpreter that is merely *between* verified versions, such as
+  3.13.0, is refused before any execution state is created or reconstructed.
+  Adding a version requires a green native cross-Python proof run;
 - one Continuum VM and one application thread;
 - freeze only at compiler-inserted safe points;
 - host builtin/module calls are atomic and cannot be suspended internally;

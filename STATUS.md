@@ -1,7 +1,7 @@
 # Status
 
-Version: 0.3.1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · CPython 3.12.13 and 3.13.14
-Updated: 2026-07-30
+Version: 0.4.0a1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · CPython 3.12.13 and 3.13.14
+Updated: 2026-07-31
 
 ## Platform matrix
 
@@ -18,6 +18,26 @@ has no Windows job.
 
 ## WORKING
 
+- **Verified cross-Python continuation, through the public CLI.** A program
+  frozen on native Linux x86_64 under CPython 3.12.13 was verified and resumed
+  on a native Apple Silicon macOS arm64 runner under CPython 3.13.14, after the
+  source process had exited and been reaped. Actions run
+  [30658976309](https://github.com/byte271/Continuum/actions/runs/30658976309)
+  at commit `40cc9dd`. The image SHA-256 was
+  `3b564d9d37a9353ebb22027a4b3597d30fc2eef1272c3a220fc7f65e3d939824` at
+  capture, on arrival, and after restore; four live logical frames were
+  restored; zero completed actions repeated; source-plus-target output equalled
+  an independently run uninterrupted control. Only `continuum run`,
+  `continuum freeze`, `continuum verify`, and `continuum resume` were used.
+- Container format 0.2 with an explicit execution compatibility contract:
+  container format, graph codec, IR, and execution ABI versioned separately,
+  creator runtime and Python demoted to provenance, and an exact allowlist of
+  verified target interpreters. Creator runtime version is no longer a restore
+  requirement. Format 0.1 images keep their original exact-version rule.
+- Cross-Python differential corpus: 204 cases over 50 programs, CPython
+  3.12.13 → 3.13.14, 189 accepted and correct, **0 silent mismatches**, 0
+  infrastructure failures, live frame depth to 16. 15 cases are language
+  frontend gaps, reported separately.
 - Verified cross-platform continuation from a native x86_64 Linux
   GitHub-hosted VM to a native Apple Silicon macOS arm64 GitHub-hosted runner.
   Actions run
@@ -79,7 +99,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 300 tests discovered. Tests skip only where the host
+- Current full suite: 302 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.
