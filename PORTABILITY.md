@@ -37,7 +37,8 @@ Resume rejects an image unless all of these checks pass:
   allowlist); exactly the creator's CPython for legacy format 0.1;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
-- the exact target `(OS, architecture)` pair in the manifest platform list;
+- the exact target `(OS, architecture)` pair in the image's platform list
+  **and** in the reading runtime's own accepted list, `abi.VERIFIED_PLATFORMS`;
 - `native_payload_required` is false;
 - every mandatory capability is recognized;
 - source, IR, module, runtime, resource, frame, heap-count, and checksum
@@ -47,6 +48,11 @@ The accepted pairs are Linux x86_64, Linux arm64, Darwin x86_64, Darwin arm64,
 and Windows x86_64. Windows arm64 is not an accepted pair and is rejected by
 the pair check even though `Windows` and `arm64` each appear in the preceding
 lists.
+
+That rejection does not depend on the image being honest. The pair is checked
+against the reading runtime's own list as well as the image's, so an image that
+inserts Windows arm64 into its platform list and recomputes every archive
+checksum is still refused.
 
 Accepting a target pair is a format-compatibility decision only. It states
 that this runtime will attempt the restore, not that the pair has ever been

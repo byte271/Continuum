@@ -654,3 +654,83 @@ answer = work(20)
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AdversarialPlatformWideningTests(ImageRefusalCase):
+    """An image cannot grant itself a platform this runtime does not accept.
+
+    This is the whole-image version of the contract-level gate: a real image is
+    edited to add Windows arm64 to every platform list it carries, and every
+    covered archive checksum is recomputed so the artifact is internally
+    consistent. Integrity checking passes and the image still must not restore.
+    """
+
+    def widened(self, name: str = "windows-arm64.cont") -> Path:
+        def transform(entries):
+            def mutate(manifest):
+                target = manifest["execution_contract"]["target"]
+                target["operating_systems"] = sorted(
+                    set(target["operating_systems"]) | {"Windows"}
+                )
+                target["architectures"] = sorted(
+                    set(target["architectures"]) | {"arm64"}
+                )
+                target["platforms"] = target["platforms"] + [
+                    {"os": "Windows", "architecture": "arm64"}
+                ]
+
+            patch_manifest(entries, mutate)
+
+        return rewrite(self.image, self.root / name, transform)
+
+    def test_the_tampered_image_is_internally_consistent(self):
+        """Guard the premise: this must fail on policy, not on a broken hash."""
+        loaded = load_image(self.widened("premise.cont"))
+        platforms = loaded.manifest["execution_contract"]["target"]["platforms"]
+        self.assertIn({"os": "Windows", "architecture": "arm64"}, platforms)
+
+    def test_windows_arm64_is_refused_deterministically(self):
+        loaded = load_image(self.widened())
+        for attempt in range(3):
+            with self.subTest(attempt=attempt):
+                with self.assertRaises(IncompatibleImage) as caught:
+                    loaded.validate_compatibility(
+                        Host("3.12.13", "Windows", "arm64")
+                    )
+                self.assertEqual(
+                    caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM
+                )
+                self.assertIn(
+                    "this runtime does not accept platform", str(caught.exception)
+                )
+
+    def test_the_refusal_survives_a_verified_python_version(self):
+        """Widening the platform cannot be smuggled in on a verified interpreter."""
+        loaded = load_image(self.widened("with-verified-python.cont"))
+        for version in abi.VERIFIED_PYTHON_VERSIONS:
+            with self.subTest(python=version):
+                with self.assertRaises(IncompatibleImage) as caught:
+                    loaded.validate_compatibility(
+                        Host(version, "Windows", "arm64")
+                    )
+                self.assertEqual(
+                    caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM
+                )
+
+    def test_the_widened_image_still_restores_on_an_accepted_platform(self):
+        """The tampering must not break unrelated, legitimate targets."""
+        loaded = load_image(self.widened("still-good.cont"))
+        decision = loaded.validate_compatibility(Host("3.12.13", "Linux", "x86_64"))
+        self.assertEqual(decision["compatibility_policy"], abi.POLICY_EXECUTION_ABI)
+
+    def test_verify_image_refuses_the_widened_image_on_that_platform(self):
+        """The public deep-verify path refuses it too, not just the decision."""
+        from unittest import mock
+
+        target = self.widened("verify-path.cont")
+        with mock.patch.object(
+            abi, "current_host", return_value=Host("3.12.13", "Windows", "arm64")
+        ):
+            with self.assertRaises(IncompatibleImage) as caught:
+                verify_image(target)
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
