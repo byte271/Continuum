@@ -139,9 +139,11 @@ has no Windows job.
 - Self-contained runtime bundles have builders and transactional installers
   for all three hosts: `.tar.gz` through `build_bundle.sh`/`install.sh` on
   POSIX, `.zip` through `build_bundle_windows.ps1`/`install.ps1` on Windows.
-  All three are built, moved, installed, and checked in CI. No public release
-  download or one-line installer exists, so the published download path
-  remains unverified.
+  All three are built, moved, installed, and checked in CI, and all three are
+  published as v0.3.0 release assets with SHA-256 sidecars. The Windows
+  archive was additionally installed from its published release URL and used
+  to run a complete continuation; the Linux and macOS network installs have
+  only been exercised in CI against a local archive.
 
 ## NOT WORKING
 
@@ -173,4 +175,5 @@ has no Windows job.
 - The 50-program corpus on Windows or macOS.
 - Cross-platform restoration for programs or resources outside the exact
   verified controlled subset.
-- Any published release download or one-line installer.
+- Installing the Linux x86_64 and macOS arm64 archives from their published
+  release URLs. Only the Windows path has been exercised over the network.

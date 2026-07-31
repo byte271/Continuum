@@ -279,9 +279,33 @@ All three bundles are built, moved, extracted, exercised with the complete
 test suite, installed into a fresh prefix, and checked with `continuum doctor`
 on every push to `main` by `runtime-bundles.yml`.
 
-No published release download or one-line network installer exists yet, so
-this README does not publish an installer command. Bundles are currently
-retained only as workflow artifacts.
+The **v0.3.0** release publishes all three, each built by the CI run above
+and verified against its recorded digest before upload:
+
+| Platform | Asset | SHA-256 |
+| --- | --- | --- |
+| Linux x86_64 | [`continuum-linux-x86_64.tar.gz`](https://github.com/byte271/Continuum/releases/download/v0.3.0/continuum-linux-x86_64.tar.gz) | `8cd80c2d0094be1331107f2b8762085271112c4655dc853d4050cfaa9d3ec9f1` |
+| Apple Silicon macOS arm64 | [`continuum-macos-arm64.tar.gz`](https://github.com/byte271/Continuum/releases/download/v0.3.0/continuum-macos-arm64.tar.gz) | `1237449dff8d5d92db39ad36e156455784e08156e040348559b0609e90a1f009` |
+| Windows x86_64 | [`continuum-windows-x86_64.zip`](https://github.com/byte271/Continuum/releases/download/v0.3.0/continuum-windows-x86_64.zip) | `05c41f9b50858c400cadd6ad52b051e02a91ba22f8fac6d70df7c9a4eee1b0e0` |
+
+```bash
+curl -LO https://github.com/byte271/Continuum/releases/download/v0.3.0/continuum-linux-x86_64.tar.gz
+packaging/install.sh --archive continuum-linux-x86_64.tar.gz --sha256 8cd80c2d0094be1331107f2b8762085271112c4655dc853d4050cfaa9d3ec9f1
+```
+
+```powershell
+.\packaging\install.ps1 -Archive continuum-windows-x86_64.zip -Sha256 05c41f9b50858c400cadd6ad52b051e02a91ba22f8fac6d70df7c9a4eee1b0e0
+```
+
+The installer requires the expected digest and refuses to proceed without it;
+`install.ps1` and `install.sh` both accept an HTTPS archive directly and refuse
+plain HTTP.
+
+The Windows path was exercised end to end from the published URL above:
+downloaded, digest-verified, installed into a fresh prefix, checked with
+`continuum doctor`, and used to run a complete `continuum demo` continuation.
+The Linux and macOS archives are published with the same shape but their
+network install has only been exercised in CI against a local archive.
 
 ## Repository map
 

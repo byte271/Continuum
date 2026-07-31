@@ -28,10 +28,11 @@ visible as a change, not as a silently dropped line.
    `15bceefece050d06a1f504244a77434e31fd5228`, including the exact proof image,
    Linux and final evidence archives, verification summary, and SHA-256
    manifest.
-6. Publish versioned Linux x86_64, macOS arm64, and Windows x86_64
-   self-contained runtime bundles from immutable release URLs and hashes, then
-   test the documented one-line installer, including the PowerShell path, from
-   those URLs.
+6. **Partly done.** Versioned Linux x86_64, macOS arm64, and Windows x86_64
+   bundles are published at immutable v0.3.0 release URLs with SHA-256
+   sidecars, and the PowerShell installer was exercised from its published URL
+   through to a working continuation. Still outstanding: the same network
+   install for the Linux and macOS archives.
 7. Run the unchanged 50-program corpus in the native cross-platform workflow
    and retain per-program Linux-image/macOS-resume results. Regenerate the
    corpus report natively on macOS arm64 and Windows x86_64 so the published

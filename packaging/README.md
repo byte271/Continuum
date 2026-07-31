@@ -92,5 +92,16 @@ complete `continuum demo` continuation against the moved bundle.
 That is evidence of a working native installation on each host. It is not
 evidence that an image moves between hosts; see `PORTABILITY.md`.
 
-Published one-line download commands must not be added to the main README
-until all three platform archives have immutable release URLs and hashes.
+All three archives are published with immutable release URLs and SHA-256
+sidecars as of v0.3.0, so the main README documents the download and install
+commands. Each digest below is the one CI recorded and the release upload was
+verified against:
+
+```text
+continuum-linux-x86_64.tar.gz   8cd80c2d0094be1331107f2b8762085271112c4655dc853d4050cfaa9d3ec9f1
+continuum-macos-arm64.tar.gz    1237449dff8d5d92db39ad36e156455784e08156e040348559b0609e90a1f009
+continuum-windows-x86_64.zip    05c41f9b50858c400cadd6ad52b051e02a91ba22f8fac6d70df7c9a4eee1b0e0
+```
+
+Never install an archive without passing its expected digest; the installers
+require it.
