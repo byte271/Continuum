@@ -31,9 +31,10 @@ therefore cannot succeed across hosts with different path forms.
 
 Resume rejects an image unless all of these checks pass:
 
-- format 0.1 and current IR 0.4 schema validation;
+- container format 0.2 (or legacy 0.1) and current IR 0.4 schema validation;
 - Continuum runtime implementation. Container format 0.2 images no longer require an exact runtime version `0.4.0a1`; they require the execution ABI and the capability set. Container format 0.1 images still require it exactly;
-- CPython 3.12.13;
+- CPython 3.12.13 or 3.13.14 for container format 0.2 (the exact verified
+  allowlist); exactly the creator's CPython for legacy format 0.1;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
 - the exact target `(OS, architecture)` pair in the manifest platform list;
@@ -156,3 +157,11 @@ in this package.
   not authenticated source hashes.
 - Strict host-file verification has a hash/open time-of-check/time-of-use
   window.
+
+## Live source-code migration (experimental, container format 0.2)
+
+| Revisions | Source | Target | Status |
+| --- | --- | --- | --- |
+| A -> B, plan format 1.0 | Native Linux x86_64, CPython 3.12.13 | Native Apple Silicon macOS arm64, CPython 3.13.14 | **verified**; Actions run 30668706966 at commit `03da288`, image SHA-256 `fb847f3b1e7fab9921f46d97b4f6b996716e89bad7880ce5231f45d9ac8c4d80` identical at capture, on arrival, and after migration; 4 active frames and 20 bindings mapped totally; 30 action nonces each exactly once; 0 repeated; old revision's future behavior not executed, new revision's executed; zero oracle failures |
+
+Everything outside the accepted edit classes in COMPATIBILITY.md is refused.
