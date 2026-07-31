@@ -2,7 +2,7 @@
 
 [![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml)
 [![Runtime bundles](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml)
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](STATUS.md)
+[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](STATUS.md)
 [![Python](https://img.shields.io/badge/CPython-3.12.13-3776ab.svg)](#requirements)
 [![Platforms](https://img.shields.io/badge/native-Linux%20%7C%20macOS%20%7C%20Windows-success.svg)](#platform-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -54,7 +54,7 @@ Final result hash matches control: yes
 ## Platform support
 
 Continuum runs natively on three platforms. Every push builds exact CPython
-3.12.13 **from source** on each one and runs the complete 95-test suite, the
+3.12.13 **from source** on each one and runs the complete test suite, the
 transactional installer, and `continuum doctor` against the moved bundle.
 
 | Platform | Runs natively | Same-host continuation | Image moves to another platform |

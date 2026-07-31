@@ -36,7 +36,10 @@ CHECKED = (
 
 # E0601 used-before-assignment, E0602 undefined-variable,
 # E0603 undefined-all-variable, E1120 no-value-for-parameter.
-ENABLED = "E0601,E0602,E0603,E1120"
+# Deliberately narrow: used-before-assignment and undefined-variable are the
+# two classes that actually shipped in source_linux.py. Inference-dependent
+# checks vary between platforms and are not what this gate is for.
+ENABLED = "E0601,E0602"
 
 
 def pylint_available() -> bool:

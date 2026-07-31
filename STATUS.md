@@ -1,6 +1,6 @@
 # Status
 
-Version: 0.3.0 · IR 0.4 · image format 0.1 · CPython 3.12.13 exactly
+Version: 0.3.1 · IR 0.4 · image format 0.1 · CPython 3.12.13 exactly
 Updated: 2026-07-30
 
 ## Platform matrix

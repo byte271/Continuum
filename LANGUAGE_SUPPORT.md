@@ -1,6 +1,6 @@
 # Python language support
 
-This matrix describes Continuum IR 0.4 (runtime 0.3.0) as verified on
+This matrix describes Continuum IR 0.4 (runtime 0.3.1) as verified on
 CPython 3.12.13. The
 status words are literal: **supported**, **partially supported**,
 **explicitly rejected**, or **untested**. “Supported” applies only inside the

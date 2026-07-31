@@ -32,7 +32,7 @@ therefore cannot succeed across hosts with different path forms.
 Resume rejects an image unless all of these checks pass:
 
 - format 0.1 and current IR 0.4 schema validation;
-- Continuum runtime implementation and exact runtime version `0.3.0`;
+- Continuum runtime implementation and exact runtime version `0.3.1`;
 - CPython 3.12.13;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
