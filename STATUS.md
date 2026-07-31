@@ -101,8 +101,14 @@ has no Windows job.
   methods, `__init__`, class and instance attributes, and attribute
   assignment, with no host type object or host instance created anywhere.
   Inheritance, descriptors, metaclasses, and user-defined exception classes
-  remain out of this revision. The single combined Linux x86_64 to macOS
-  arm64 proof for IR 0.4 has not been run yet.
+  remain out of this revision.
+- The single combined Linux x86_64 to macOS arm64 proof for IR 0.4 passed in
+  Actions run
+  [30592158078](https://github.com/byte271/Continuum/actions/runs/30592158078)
+  at commit `21f7b2e`. The migrated image carried a VM-owned class and
+  instance, a live `try/except`, a variadic method binding, and a closure
+  cell shared by two functions, all folded into the final digest.
+- IR 0.4 is unmerged. `main` and the v0.2.0 release are untouched by it.
 - IR 0.4 images are not interchangeable with IR 0.3 images: the runtime
   negotiates an exact `continuum-ir-<version>` capability, so v0.2.0 images
   are rejected by this revision and vice versa.

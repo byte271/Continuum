@@ -27,6 +27,7 @@
 | Demo synchronization stays out of `continuum run` | `test_start_gate_is_not_installed_outside_the_demo` |
 | Linux x86_64 to macOS arm64, IR 0.2 | Actions run 30489463484; 26/26 proof conditions passed |
 | Linux x86_64 to macOS arm64, IR 0.3 | Actions run 30509186641 at commit `3a4a43f` (runtime 0.2.0a1) and run 30585208329 at commit `a73073d` (runtime 0.2.0); both jobs passed |
+| IR 0.4 language subset across platforms | Actions run 30592158078 at commit `21f7b2e`; class, instance, handler, variadic binding, and shared cell migrated |
 | Native same-host continuation, three hosts | `runtime-bundles.yml` jobs `linux-x86_64`, `macos-arm64`, `windows-x86_64`, each running this complete suite |
 | Windows x86_64 accepted, Windows arm64 rejected | `test_doctor_accepts_windows_x86_64`, `test_unsupported_windows_arm64_pair_is_rejected` |
 | Windows proof markers under CRLF | `test_proof_markers_accept_windows_crlf_without_substring_matches` |
