@@ -13,6 +13,14 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import FORMAT_VERSION, IR_VERSION, SUPPORTED_PYTHON, __version__
+from . import abi
+from .abi import (
+    CONTAINER_FORMAT_VERSION,
+    EXECUTION_ABI_VERSION,
+    GRAPH_CODEC_VERSION,
+    LEGACY_CONTAINER_FORMAT_VERSION,
+    IncompatibleImage,
+)
 from .codec import decode_graph, encode_graph
 from .errors import ImageError, ResourceError
 from .resources import ResourceManager
@@ -34,24 +42,13 @@ REQUIRED_ENTRIES = {
     "checksums.json",
 }
 STATIC_ENTRIES = REQUIRED_ENTRIES | {"SIGNATURE"}
-SUPPORTED_CAPABILITIES = {
-    f"continuum-ir-{IR_VERSION}",
-    "explicit-frames",
-    "graph-codec-0.1",
-    "portable-readonly-files",
-}
+SUPPORTED_CAPABILITIES = abi.PROVIDED_CAPABILITIES
 # The target pairs this runtime will attempt to restore. Membership is a
 # format-compatibility decision only; it is never evidence that a source or
 # target platform has been exercised. PORTABILITY.md holds that evidence.
-TARGET_OPERATING_SYSTEMS = ("Linux", "Darwin", "Windows")
-TARGET_ARCHITECTURES = ("x86_64", "arm64")
-TARGET_PLATFORMS = (
-    {"os": "Linux", "architecture": "x86_64"},
-    {"os": "Linux", "architecture": "arm64"},
-    {"os": "Darwin", "architecture": "x86_64"},
-    {"os": "Darwin", "architecture": "arm64"},
-    {"os": "Windows", "architecture": "x86_64"},
-)
+TARGET_OPERATING_SYSTEMS = abi.TARGET_OPERATING_SYSTEMS
+TARGET_ARCHITECTURES = abi.TARGET_ARCHITECTURES
+TARGET_PLATFORMS = abi.TARGET_PLATFORMS
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -65,12 +62,7 @@ def _sha256(content: bytes) -> str:
 
 
 def _normalized_architecture() -> str:
-    value = platform.machine().lower()
-    return {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "aarch64": "arm64",
-    }.get(value, value)
+    return abi.normalized_architecture()
 
 
 def _runtime_python() -> str:
@@ -136,6 +128,8 @@ def save_image(
         "runtime_version": __version__,
         "python_version": _runtime_python(),
         "ir_version": vm.ir["ir_version"],
+        "graph_codec_version": GRAPH_CODEC_VERSION,
+        "execution_abi_version": EXECUTION_ABI_VERSION,
         "instructions_executed": vm.instructions_executed,
         "safe_points_executed": vm.safe_points_executed,
         "argv": vm.argv,
@@ -161,16 +155,16 @@ def save_image(
             "architecture": source_architecture or _normalized_architecture(),
             "python_version": _runtime_python(),
         },
-        "target_compatibility": {
-            "operating_systems": list(TARGET_OPERATING_SYSTEMS),
-            "architectures": list(TARGET_ARCHITECTURES),
-            "platforms": [dict(item) for item in TARGET_PLATFORMS],
-            "python_version": SUPPORTED_PYTHON,
-            "runtime_implementation": "continuum-vm",
-            "runtime_version": __version__,
-            "native_payload_required": False,
-            "required_capabilities": sorted(SUPPORTED_CAPABILITIES),
-        },
+        # The single authority for whether a target may restore this image.
+        # Creator identity inside it is provenance; the restore decision comes
+        # from the execution ABI, the capability list, and the verified target
+        # Python allowlist. See continuum/abi.py.
+        "execution_contract": abi.build_contract(
+            creator_os=source_os or platform.system(),
+            creator_architecture=source_architecture or _normalized_architecture(),
+            creator_python=_runtime_python(),
+            creator_continuum_version=__version__,
+        ),
         "entry_program": vm.ir["source_name"],
         "entry_program_sha256": actual_source_hash,
         "module_hashes_entry": "modules/hashes.json",
@@ -299,46 +293,28 @@ class LoadedImage:
                 resource.close()
             raise
 
-    def validate_compatibility(self) -> None:
-        compatibility = self.manifest["target_compatibility"]
-        if compatibility.get("runtime_implementation") != "continuum-vm":
-            raise ImageError("image requires an unsupported runtime implementation")
-        if compatibility.get("native_payload_required") is not False:
-            raise ImageError("image requires a native payload")
-        capabilities = compatibility.get("required_capabilities")
-        if not isinstance(capabilities, list) or any(
-            not isinstance(item, str) for item in capabilities
-        ):
-            raise ImageError("image has invalid required capabilities")
-        unknown = set(capabilities) - SUPPORTED_CAPABILITIES
-        if unknown:
-            raise ImageError(
-                f"image requires unknown capabilities: {sorted(unknown)}"
-            )
-        current_os = platform.system()
-        current_arch = _normalized_architecture()
-        if current_os not in compatibility["operating_systems"]:
-            raise ImageError(f"target operating system is unsupported: {current_os}")
-        if current_arch not in compatibility["architectures"]:
-            raise ImageError(f"target architecture is unsupported: {current_arch}")
-        platforms = compatibility.get("platforms")
-        if platforms is not None and {
-            "os": current_os,
-            "architecture": current_arch,
-        } not in platforms:
-            raise ImageError(
-                f"target platform is unsupported: {current_os} {current_arch}"
-            )
-        if _runtime_python() != compatibility["python_version"]:
-            raise ImageError(
-                f"Python version mismatch: image requires "
-                f"{compatibility['python_version']}, current runtime is {_runtime_python()}"
-            )
-        if compatibility["runtime_version"] != __version__:
-            raise ImageError(
-                f"runtime version mismatch: image requires "
-                f"{compatibility['runtime_version']}, installed runtime is {__version__}"
-            )
+    def validate_compatibility(self, host: abi.Host | None = None) -> dict[str, Any]:
+        """Decide whether this host may restore the image, before touching state.
+
+        Container format 0.2 images carry an explicit execution contract and are
+        decided by `abi.decide_restore`. Format 0.1 images carry no contract, so
+        rather than assuming they are ABI-compatible they keep their original
+        exact-Python, exact-runtime rule. Either way the decision happens before
+        any execution state is reconstructed.
+        """
+
+        target = host if host is not None else abi.current_host()
+        format_version = self.manifest.get("format_version")
+        if format_version == LEGACY_CONTAINER_FORMAT_VERSION:
+            compatibility = self.manifest.get("target_compatibility")
+            if not isinstance(compatibility, dict):
+                raise ImageError("legacy image has invalid compatibility metadata")
+            abi.legacy_decision(compatibility, target)
+            return {
+                "container_format_version": LEGACY_CONTAINER_FORMAT_VERSION,
+                "compatibility_policy": abi.POLICY_EXACT,
+            }
+        return abi.decide_restore(self.manifest.get("execution_contract"), target)
 
 
 def load_image(path: str | os.PathLike[str]) -> LoadedImage:
@@ -400,7 +376,7 @@ def inspect_image(path: str | os.PathLike[str]) -> dict[str, Any]:
 
 def verify_image(path: str | os.PathLike[str]) -> dict[str, Any]:
     loaded = load_image(path)
-    loaded.validate_compatibility()
+    decision = loaded.validate_compatibility()
     resource_placeholders = {
         record["resource_id"]: object()
         for record in loaded.resources_document["resources"]
@@ -427,6 +403,15 @@ def verify_image(path: str | os.PathLike[str]) -> dict[str, Any]:
         "graph": "verified",
         "frames": "verified",
         "resources": "metadata-verified-not-opened",
+        "execution_contract": (
+            abi.contract_summary(decision)
+            if decision.get("compatibility_policy") == abi.POLICY_EXECUTION_ABI
+            else {
+                "container_format_version": LEGACY_CONTAINER_FORMAT_VERSION,
+                "compatibility_policy": abi.POLICY_EXACT,
+            }
+        ),
+        "restore_python_version": _runtime_python(),
     }
 
 
@@ -487,23 +472,55 @@ def _parse_json(content: bytes, name: str) -> Any:
         raise ImageError(f"invalid JSON in {name}") from exc
 
 
-def _validate_documents(
-    manifest: Any,
-    runtime: Any,
-    ir: Any,
-    modules: Any,
-    heap: Any,
-    resources: Any,
-    frames: Any,
-    raw: dict[str, bytes],
+def _validate_contract_documents(
+    manifest: dict[str, Any],
+    runtime: dict[str, Any],
+    source_metadata: dict[str, Any],
 ) -> None:
-    if not isinstance(manifest, dict) or manifest.get("format_version") != FORMAT_VERSION:
-        raise ImageError("unsupported image format version")
-    if manifest.get("security_boundary") != "executable-untrusted-content":
-        raise ImageError("image omits its executable-content security boundary")
+    """Cross-check a format 0.2 contract against the rest of the image.
+
+    The contract is parsed under bounds first, then checked for agreement with
+    `runtime.json` and the manifest's own source provenance. Metadata that
+    disagrees with itself is refused here, before any compatibility decision, so
+    an image cannot present one identity to the reader and another to the
+    restore policy.
+    """
+
+    contract = abi.parse_contract(manifest.get("execution_contract"))
+    creator = contract["creator"]
+    if creator["python_version"] != source_metadata.get("python_version"):
+        raise ImageError(
+            "creator Python provenance disagrees with the manifest source section"
+        )
+    if creator["os"] != source_metadata.get("os") or creator[
+        "architecture"
+    ] != source_metadata.get("architecture"):
+        raise ImageError(
+            "creator platform provenance disagrees with the manifest source section"
+        )
+    if creator["python_version"] != runtime.get("python_version"):
+        raise ImageError("creator Python provenance disagrees with runtime metadata")
+    if creator["continuum_version"] != runtime.get("runtime_version"):
+        raise ImageError("creator runtime provenance disagrees with runtime metadata")
+    if contract["execution_abi_version"] != runtime.get("execution_abi_version"):
+        raise ImageError("execution ABI metadata is inconsistent")
+    if contract["graph_codec_version"] != runtime.get("graph_codec_version"):
+        raise ImageError("graph codec metadata is inconsistent")
+
+
+def _validate_legacy_compatibility(
+    manifest: dict[str, Any],
+    runtime: dict[str, Any],
+    source_metadata: dict[str, Any],
+) -> None:
+    """Validate a format 0.1 image exactly as the 0.1 reader did.
+
+    Kept verbatim rather than relaxed: these images carry no execution contract,
+    so the original invariants are the only ones that were ever proven for them.
+    """
+
     compatibility = manifest.get("target_compatibility")
-    source_metadata = manifest.get("source")
-    if not isinstance(compatibility, dict) or not isinstance(source_metadata, dict):
+    if not isinstance(compatibility, dict):
         raise ImageError("invalid compatibility metadata")
     if (
         compatibility.get("runtime_implementation") != "continuum-vm"
@@ -515,7 +532,7 @@ def _validate_documents(
         not isinstance(item, str) for item in capabilities
     ):
         raise ImageError("invalid required capability list")
-    unknown = set(capabilities) - SUPPORTED_CAPABILITIES
+    unknown = set(capabilities) - set(SUPPORTED_CAPABILITIES)
     if unknown:
         raise ImageError(f"unknown mandatory image capabilities: {sorted(unknown)}")
     platforms = compatibility.get("platforms")
@@ -531,10 +548,49 @@ def _validate_documents(
     ):
         raise ImageError("invalid target platform compatibility list")
     if (
+        runtime.get("runtime_version") != compatibility.get("runtime_version")
+        or runtime.get("python_version") != source_metadata.get("python_version")
+        or runtime.get("python_version") != compatibility.get("python_version")
+    ):
+        raise ImageError("runtime metadata is inconsistent")
+
+
+def _validate_documents(
+    manifest: Any,
+    runtime: Any,
+    ir: Any,
+    modules: Any,
+    heap: Any,
+    resources: Any,
+    frames: Any,
+    raw: dict[str, bytes],
+) -> None:
+    if not isinstance(manifest, dict) or manifest.get("format_version") not in {
+        CONTAINER_FORMAT_VERSION,
+        LEGACY_CONTAINER_FORMAT_VERSION,
+    }:
+        raise ImageError(
+            f"unsupported image format version: {manifest.get('format_version')!r} "
+            f"is neither {CONTAINER_FORMAT_VERSION!r} nor "
+            f"{LEGACY_CONTAINER_FORMAT_VERSION!r}"
+            if isinstance(manifest, dict)
+            else "unsupported image format version"
+        )
+    if manifest.get("security_boundary") != "executable-untrusted-content":
+        raise ImageError("image omits its executable-content security boundary")
+    source_metadata = manifest.get("source")
+    if not isinstance(source_metadata, dict):
+        raise ImageError("invalid compatibility metadata")
+    if (
         not isinstance(runtime, dict)
         or runtime.get("runtime_implementation") != "continuum-vm"
     ):
         raise ImageError("invalid runtime metadata")
+
+    if manifest.get("format_version") == CONTAINER_FORMAT_VERSION:
+        _validate_contract_documents(manifest, runtime, source_metadata)
+    else:
+        _validate_legacy_compatibility(manifest, runtime, source_metadata)
     validate_ir(ir)
     if _sha256(raw["code/program.py"]) != manifest.get("entry_program_sha256"):
         raise ImageError("program hash does not match manifest")
@@ -543,12 +599,11 @@ def _validate_documents(
         or ir.get("source_name") != manifest.get("entry_program")
     ):
         raise ImageError("IR source identity does not match manifest")
-    if (
-        runtime.get("runtime_version") != compatibility.get("runtime_version")
-        or runtime.get("python_version") != source_metadata.get("python_version")
-        or runtime.get("python_version") != compatibility.get("python_version")
-        or runtime.get("ir_version") != ir.get("ir_version")
-    ):
+    if runtime.get("ir_version") != ir.get("ir_version"):
+        raise ImageError("runtime metadata is inconsistent")
+    if manifest.get("format_version") == CONTAINER_FORMAT_VERSION and runtime.get(
+        "ir_version"
+    ) != manifest["execution_contract"].get("ir_version"):
         raise ImageError("runtime metadata is inconsistent")
     if (
         not isinstance(modules, dict)

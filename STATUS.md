@@ -1,6 +1,6 @@
 # Status
 
-Version: 0.3.1 · IR 0.4 · image format 0.1 · CPython 3.12.13 exactly
+Version: 0.3.1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · CPython 3.12.13 and 3.13.14
 Updated: 2026-07-30
 
 ## Platform matrix
@@ -79,7 +79,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 180 tests discovered. Tests skip only where the host
+- Current full suite: 227 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

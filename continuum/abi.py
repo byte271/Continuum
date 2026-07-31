@@ -46,8 +46,8 @@ from .errors import ImageError
 
 # The container layout that carries an explicit execution contract. Format 0.1
 # images predate the contract and are read under the legacy rule below.
-CONTAINER_FORMAT_VERSION = "0.2"
-LEGACY_CONTAINER_FORMAT_VERSION = FORMAT_VERSION
+CONTAINER_FORMAT_VERSION = FORMAT_VERSION
+LEGACY_CONTAINER_FORMAT_VERSION = "0.1"
 
 # The object-graph encoding, versioned independently of the container. Bump this
 # whenever an encoded graph from an older writer would decode to a different
