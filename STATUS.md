@@ -1,6 +1,6 @@
 # Status
 
-Version: 0.2.0 · IR 0.3 · image format 0.1 · CPython 3.12.13 exactly
+Version: 0.3.0 · IR 0.4 · image format 0.1 · CPython 3.12.13 exactly
 Updated: 2026-07-30
 
 ## Platform matrix
@@ -86,7 +86,7 @@ has no Windows job.
 
 ## IN PROGRESS
 
-- Continuum IR 0.4, an in-progress language-subset expansion. Milestone 1,
+- Continuum IR 0.4, released as runtime 0.3.0. Milestone 1,
   portable `try/except`, is complete: handler matching, tuple matching, `as`
   binding with handler-exit unbinding, `else`, and `try/except/finally`, with
   the live exception carried as an ordinary portable operand so a checkpoint
@@ -108,7 +108,10 @@ has no Windows job.
   at commit `21f7b2e`. The migrated image carried a VM-owned class and
   instance, a live `try/except`, a variadic method binding, and a closure
   cell shared by two functions, all folded into the final digest.
-- IR 0.4 is unmerged. `main` and the v0.2.0 release are untouched by it.
+- IR 0.4 supersedes the v0.2.0 release. An image written by either runtime
+  is rejected by the other: the capability negotiation requires an exact
+  `continuum-ir-<version>` match, so v0.2.0 images cannot be resumed by
+  v0.3.0 and vice versa.
 - IR 0.4 images are not interchangeable with IR 0.3 images: the runtime
   negotiates an exact `continuum-ir-<version>` capability, so v0.2.0 images
   are rejected by this revision and vice versa.

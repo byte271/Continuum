@@ -133,7 +133,7 @@ The current writer requires:
 
 - image format 0.1;
 - IR 0.4;
-- Continuum runtime 0.2.0;
+- Continuum runtime 0.3.0;
 - CPython 3.12.13;
 - target OS Linux, Darwin, or Windows;
 - target architecture x86_64 or arm64;

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "continuum-state"
-version = "0.2.0"
+version = "0.3.0"
 description = "Portable continuation images for a controlled pure-Python runtime"
 readme = "README.md"
 requires-python = "==3.12.13"

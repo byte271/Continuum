@@ -32,7 +32,7 @@ therefore cannot succeed across hosts with different path forms.
 Resume rejects an image unless all of these checks pass:
 
 - format 0.1 and current IR 0.4 schema validation;
-- Continuum runtime implementation and exact runtime version `0.2.0`;
+- Continuum runtime implementation and exact runtime version `0.3.0`;
 - CPython 3.12.13;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
@@ -57,13 +57,14 @@ implementation and can still have platform-specific behavior.
 
 | Revision | Source | Target | Result |
 | --- | --- | --- | --- |
-| Current IR 0.3/runtime 0.2.0 | Current Linux x86_64 process | New process on same Linux x86_64 host | verified; `runtime-bundles.yml` `linux-x86_64` |
-| Current IR 0.3/runtime 0.2.0 | Current Apple Silicon macOS arm64 process | New process on same macOS arm64 host | verified; `runtime-bundles.yml` `macos-arm64` |
-| Current IR 0.3/runtime 0.2.0 | Current Windows x86_64 process | New process on same Windows x86_64 host | verified; `runtime-bundles.yml` `windows-x86_64` |
+| Release IR 0.4/runtime 0.3.0 | Current Linux x86_64 process | New process on same Linux x86_64 host | verified; `runtime-bundles.yml` `linux-x86_64` |
+| Release IR 0.4/runtime 0.3.0 | Current Apple Silicon macOS arm64 process | New process on same macOS arm64 host | verified; `runtime-bundles.yml` `macos-arm64` |
+| Release IR 0.4/runtime 0.3.0 | Current Windows x86_64 process | New process on same Windows x86_64 host | verified; `runtime-bundles.yml` `windows-x86_64` |
 | IR 0.3/runtime 0.2.0a1 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30509186641 at commit `3a4a43fb74331113225d7b9a3a0fef4afd1371fa` |
 | Release IR 0.3/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30585208329 at commit `a73073d` |
 | Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
-| IR 0.4 language subset | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30592158078 at commit `21f7b2e`, carrying a class, an instance, a live handler, variadic bindings, and a shared closure cell |
+| IR 0.4/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30592158078 at commit `21f7b2e`, carrying a class, an instance, a live handler, variadic bindings, and a shared closure cell |
+| Release IR 0.4/runtime 0.3.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | pending; the 0.3.0 release commit reruns the same two jobs on `main` |
 | Any revision | Native Windows x86_64 | Any other platform | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Any other platform | Native Windows x86_64 | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Linux x86_64 host | Second native Linux x86_64 environment | unverified |
