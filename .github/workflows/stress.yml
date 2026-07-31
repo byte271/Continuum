@@ -48,6 +48,9 @@ jobs:
           fi
           uv python install 3.12.13
           echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
+          # pylint is not a runtime dependency; it backs the static gate that
+          # catches undefined and unbound names in release-only scripts.
+          "$(uv python find 3.12.13)" -m pip install --quiet pylint
 
       - name: Preflight - exact interpreter and expected discovery
         shell: bash
@@ -79,7 +82,8 @@ jobs:
             tests.test_process_independent \
             tests.test_harness_hold \
             tests.test_anti_replay_controls \
-            tests.test_session.PublishedDocumentReadTests; do
+            tests.test_session.PublishedDocumentReadTests \
+            tests.test_static_checks; do
             pass=0; fail=0
             for i in $(seq 1 "$REPEATS"); do
               if "$PYBIN" -m unittest "$target" > "stress-logs/${target}-${i}.log" 2>&1; then
@@ -180,6 +184,9 @@ jobs:
           fi
           uv python install 3.12.13
           echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
+          # pylint is not a runtime dependency; it backs the static gate that
+          # catches undefined and unbound names in release-only scripts.
+          "$(uv python find 3.12.13)" -m pip install --quiet pylint
 
       - name: Repeat the full suite and retain the first failure
         shell: bash

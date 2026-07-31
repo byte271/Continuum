@@ -58,7 +58,7 @@ $env:PYTHONPATH = "."; python benchmarks\measure.py `
   --iterations 10000 --repetitions 5
 ```
 
-The suite discovers 178 tests on every host. Skips are explicit and
+The suite discovers 180 tests on every host. Skips are explicit and
 mechanism-bound rather than platform exclusions:
 
 | Host | Skipped |

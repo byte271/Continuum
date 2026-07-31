@@ -79,7 +79,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 178 tests discovered. Tests skip only where the host
+- Current full suite: 180 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.
