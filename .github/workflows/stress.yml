@@ -47,10 +47,14 @@ jobs:
             echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           fi
           uv python install 3.12.13
-          echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
+          PYBIN_RESOLVED="$(uv python find 3.12.13)"
+          echo "PYBIN=$PYBIN_RESOLVED" >> "$GITHUB_ENV"
           # pylint is not a runtime dependency; it backs the static gate that
           # catches undefined and unbound names in release-only scripts.
-          "$(uv python find 3.12.13)" -m pip install --quiet pylint
+          # uv interpreters are PEP 668 externally managed, so a plain
+          # `pip install` is refused there.
+          "$PYBIN_RESOLVED" -m pip install --quiet --break-system-packages pylint             || "$PYBIN_RESOLVED" -m pip install --quiet pylint
+          "$PYBIN_RESOLVED" -c "import pylint; print('pylint', pylint.__version__)"
 
       - name: Preflight - exact interpreter and expected discovery
         shell: bash
@@ -183,10 +187,14 @@ jobs:
             echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           fi
           uv python install 3.12.13
-          echo "PYBIN=$(uv python find 3.12.13)" >> "$GITHUB_ENV"
+          PYBIN_RESOLVED="$(uv python find 3.12.13)"
+          echo "PYBIN=$PYBIN_RESOLVED" >> "$GITHUB_ENV"
           # pylint is not a runtime dependency; it backs the static gate that
           # catches undefined and unbound names in release-only scripts.
-          "$(uv python find 3.12.13)" -m pip install --quiet pylint
+          # uv interpreters are PEP 668 externally managed, so a plain
+          # `pip install` is refused there.
+          "$PYBIN_RESOLVED" -m pip install --quiet --break-system-packages pylint             || "$PYBIN_RESOLVED" -m pip install --quiet pylint
+          "$PYBIN_RESOLVED" -c "import pylint; print('pylint', pylint.__version__)"
 
       - name: Repeat the full suite and retain the first failure
         shell: bash
