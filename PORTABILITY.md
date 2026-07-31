@@ -64,7 +64,7 @@ implementation and can still have platform-specific behavior.
 | Release IR 0.3/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30585208329 at commit `a73073d` |
 | Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
 | IR 0.4/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30592158078 at commit `21f7b2e`, carrying a class, an instance, a live handler, variadic bindings, and a shared closure cell |
-| Release IR 0.4/runtime 0.3.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | pending; the 0.3.0 release commit reruns the same two jobs on `main` |
+| Release IR 0.4/runtime 0.3.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30596179154 at commit `023f74c` |
 | Any revision | Native Windows x86_64 | Any other platform | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Any other platform | Native Windows x86_64 | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Linux x86_64 host | Second native Linux x86_64 environment | unverified |

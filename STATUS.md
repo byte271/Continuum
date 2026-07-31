@@ -105,7 +105,9 @@ has no Windows job.
 - The single combined Linux x86_64 to macOS arm64 proof for IR 0.4 passed in
   Actions run
   [30592158078](https://github.com/byte271/Continuum/actions/runs/30592158078)
-  at commit `21f7b2e`. The migrated image carried a VM-owned class and
+  at commit `21f7b2e`, and again for the 0.3.0 release in run
+  [30596179154](https://github.com/byte271/Continuum/actions/runs/30596179154)
+  at commit `023f74c`. The migrated image carried a VM-owned class and
   instance, a live `try/except`, a variadic method binding, and a closure
   cell shared by two functions, all folded into the final digest.
 - IR 0.4 supersedes the v0.2.0 release. An image written by either runtime
