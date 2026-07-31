@@ -633,3 +633,113 @@ class PlanContentTests(MigrationCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LiveIdentifierRewriteTests(MigrationCase):
+    """Values reachable after a migration must name the new revision's code.
+
+    An IR function identifier embeds a line number, so inserting one line above
+    a function renames it. A `FunctionValue` in a global or a closure carries
+    that identifier itself, and a frame remap does not touch it. Before this was
+    fixed, migrating and then calling a not-yet-called function raised NameError
+    for an identifier that no longer existed -- found by sweeping every safe
+    point rather than by testing a single checkpoint.
+    """
+
+    def test_the_plan_maps_every_renamed_function_identifier(self):
+        plan = self.plan_for(REVISION_B, "ids.py")
+        mappings = plan["function_id_mappings"]
+        renamed = {
+            old: new for old, new in mappings.items() if old != new
+        }
+        self.assertTrue(
+            renamed, "the fixture no longer renames any function identifier"
+        )
+        for old, new in mappings.items():
+            with self.subTest(function=old):
+                self.assertIn(new, compile_source(REVISION_B, "prog.py")["functions"])
+
+    def test_a_migrated_vm_holds_no_stale_identifier(self):
+        from continuum.values import BoundMethodValue, ClassValue, FunctionValue
+
+        plan = self.plan_for(REVISION_B, "stale.py")
+        plan_path = self.root / "stale.cup"
+        migration.write_plan(
+            plan_path, plan, REVISION_B, compile_source(REVISION_B, "prog.py")
+        )
+        stored, _source, new_ir = migration.read_plan(plan_path)
+        vm = load_image(self.image).restore_vm()
+        migration.apply_plan(vm, stored, new_ir)
+
+        seen: set[int] = set()
+        checked = {"functions": 0}
+
+        def walk(value):
+            if id(value) in seen:
+                return
+            seen.add(id(value))
+            if isinstance(value, FunctionValue):
+                checked["functions"] += 1
+                self.assertIn(
+                    value.function_id,
+                    new_ir["functions"],
+                    f"stale function identifier {value.function_id}",
+                )
+                for item in (*value.closure, *value.defaults, *value.kw_defaults):
+                    walk(item)
+            elif isinstance(value, BoundMethodValue):
+                walk(value.function)
+                walk(value.instance)
+            elif isinstance(value, ClassValue):
+                for member in value.members.values():
+                    walk(member)
+            elif isinstance(value, dict):
+                for key, item in value.items():
+                    walk(key)
+                    walk(item)
+            elif isinstance(value, (list, tuple, set)):
+                for item in value:
+                    walk(item)
+            elif hasattr(value, "__dict__"):
+                for item in vars(value).values():
+                    walk(item)
+
+        walk(vm.globals)
+        for frame in vm.frames:
+            walk(frame.locals)
+            walk(frame.stack)
+            walk(frame.cells)
+        self.assertGreater(checked["functions"], 0, "no function values reached")
+
+    def test_a_function_first_called_after_migration_resolves(self):
+        """The regression itself: freeze before the call, migrate, then call."""
+        early = self.root / "early.cont"
+        vm = VirtualMachine(
+            compile_source(REVISION_A, "prog.py"), ["prog.py"], "prog.py"
+        )
+        with contextlib.redirect_stdout(io.StringIO()):
+            # Safe point 8: the module frame has built the function values but
+            # has not yet called through them. This is the exact position where
+            # the full sweep raised NameError for a renamed identifier.
+            while vm.frames and vm.safe_points_executed < 8:
+                vm.step()
+        save_image(early, vm, REVISION_A)
+
+        candidate = self.root / "early_b.py"
+        candidate.write_text(REVISION_B, encoding="utf-8")
+        plan = migration.plan_upgrade(early, candidate)
+        plan_path = self.root / "early.cup"
+        migration.write_plan(
+            plan_path, plan, REVISION_B, compile_source(REVISION_B, "prog.py")
+        )
+        stored, _source, new_ir = migration.read_plan(plan_path)
+        restored = load_image(early).restore_vm()
+        migration.apply_plan(restored, stored, new_ir)
+        stream = io.StringIO()
+        with contextlib.redirect_stdout(stream):
+            restored.run()
+        output = stream.getvalue()
+        self.assertIn("FINAL-V2", output)
+        self.assertEqual(
+            len([l for l in output.splitlines() if l.startswith("ACTION")]), 30
+        )

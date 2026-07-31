@@ -1,0 +1,117 @@
+{
+  "accepted_and_correct": 590,
+  "accepted_migration_correctness": 1.0,
+  "ambiguous_migrations_accepted": 0,
+  "correctly_refused": 959,
+  "elapsed_seconds": 45.62,
+  "explicitly_refused_narrower_than_hoped": 1,
+  "infrastructure_failures": 0,
+  "pairs": [
+    {
+      "counts": {
+        "accepted-and-correct": 196,
+        "explicitly-refused-narrower-than-hoped": 1
+      },
+      "expect": "accept",
+      "failures": [],
+      "pair": "accepted: insert after resume point and change future marker",
+      "reasons": [
+        "active-safepoint-unmappable"
+      ],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-and-correct": 197
+      },
+      "expect": "accept",
+      "failures": [],
+      "pair": "accepted: no-op revision",
+      "reasons": [],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-and-correct": 197
+      },
+      "expect": "accept",
+      "failures": [],
+      "pair": "accepted: add a future-only function",
+      "reasons": [],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-target-not-active-yet": 3,
+        "correctly-refused": 194
+      },
+      "expect": "refuse",
+      "failures": [],
+      "pair": "refused: delete an active function",
+      "reasons": [
+        "active-function-missing",
+        "active-safepoint-unmappable",
+        "live-function-value-missing"
+      ],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-target-not-active-yet": 2,
+        "correctly-refused": 195
+      },
+      "expect": "refuse",
+      "failures": [],
+      "pair": "refused: change an active function signature",
+      "reasons": [
+        "active-function-missing",
+        "active-safepoint-unmappable",
+        "live-function-value-missing"
+      ],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-target-not-active-yet": 1,
+        "correctly-refused": 196
+      },
+      "expect": "refuse",
+      "failures": [],
+      "pair": "refused: rename a class member live instances use",
+      "reasons": [
+        "active-function-missing",
+        "class-layout-changed"
+      ],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-target-not-active-yet": 4,
+        "correctly-refused": 193
+      },
+      "expect": "refuse",
+      "failures": [],
+      "pair": "refused: ambiguous duplicated active function",
+      "reasons": [
+        "active-function-ambiguous"
+      ],
+      "safe_points_swept": 197
+    },
+    {
+      "counts": {
+        "accepted-target-not-active-yet": 16,
+        "correctly-refused": 181
+      },
+      "expect": "refuse",
+      "failures": [],
+      "pair": "refused: wrap the active loop in a conditional",
+      "reasons": [
+        "active-safepoint-unmappable"
+      ],
+      "safe_points_swept": 197
+    }
+  ],
+  "revision_pairs": 8,
+  "silent_incorrect_migrations": 0,
+  "stride": 1
+}

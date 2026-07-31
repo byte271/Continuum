@@ -245,6 +245,15 @@ def plan_upgrade(
     # code or to nothing at all.
     _check_live_functions(loaded, old, new)
 
+    # Live values hold IR identifiers, and those identifiers embed a line
+    # number, so an edit anywhere above a function renames it. Record the full
+    # old-to-new mapping; apply_plan rewrites every reachable value with it.
+    function_id_mapping = {
+        identity.ir_function_id: new.functions[semantic_id].ir_function_id
+        for semantic_id, identity in old.functions.items()
+        if semantic_id in new.functions
+    }
+
     for depth, live in enumerate(live_frames):
         old_ir_function_id = live["function_id"]
         element = f"frame {depth} ({_describe_frame(old_ir, live)})"
@@ -371,6 +380,7 @@ def plan_upgrade(
         "binding_mappings": binding_mappings,
         "control_region_mappings": region_mappings,
         "class_mappings": class_mappings,
+        "function_id_mappings": dict(sorted(function_id_mapping.items())),
         "accepted_edit_classes": _classify_edits(old, new, frame_mappings),
         "assumptions": [
             "The new revision's IR replaces the old one wholesale; only the "
@@ -835,9 +845,90 @@ def apply_plan(vm: Any, plan: dict[str, Any], new_ir: dict[str, Any]) -> None:
         frame.pc = mapping["new_pc"]
         for block, mapped in zip(frame.blocks, mapping["control_blocks"]):
             block["target"] = mapped["new_target"]
+    _rewrite_live_identifiers(vm, plan)
     vm.ir = new_ir
     vm._prepare_execution()
     vm._validate_state()
+
+
+def _rewrite_live_identifiers(vm: Any, plan: dict[str, Any]) -> None:
+    """Point every reachable value at its counterpart in the new revision.
+
+    A frame's function is remapped by the caller, but a `FunctionValue` sitting
+    in a global, a closure, or a class member carries its own IR identifier.
+    Those identifiers embed a line number, so inserting a single line above a
+    function renames it, and a value that still names the old identifier would
+    fail to resolve -- or, worse, resolve to a different function that happened
+    to inherit the name. Both are silent corruption, so identifiers are
+    rewritten here rather than left to chance.
+
+    `FunctionValue` is frozen, so the identifier is replaced in place rather
+    than by rebuilding the value: rebuilding would break the sharing that makes
+    two references to one closure the same object.
+    """
+
+    from .values import BoundMethodValue, FunctionValue
+
+    functions = plan.get("function_id_mappings") or {}
+    classes = {
+        mapping["old_ir_class_id"]: mapping["new_ir_class_id"]
+        for mapping in plan.get("class_mappings", [])
+    }
+    if not functions and not classes:
+        return
+
+    seen: set[int] = set()
+
+    def walk(value: Any) -> None:
+        marker = id(value)
+        if marker in seen:
+            return
+        seen.add(marker)
+        if isinstance(value, FunctionValue):
+            replacement = functions.get(value.function_id)
+            if replacement is None:
+                raise MigrationRefused(
+                    REFUSE_LIVE_FUNCTION_MISSING,
+                    f"live function value {value.function_id}",
+                    "no counterpart for a reachable function value",
+                )
+            if replacement != value.function_id:
+                object.__setattr__(value, "function_id", replacement)
+            for cell in value.closure:
+                walk(cell)
+            for item in (*value.defaults, *value.kw_defaults):
+                walk(item)
+        elif isinstance(value, ClassValue):
+            replacement = classes.get(value.class_id)
+            if replacement is not None and replacement != value.class_id:
+                value.class_id = replacement
+            for member in value.members.values():
+                walk(member)
+        elif isinstance(value, BoundMethodValue):
+            walk(value.function)
+            walk(value.instance)
+        elif isinstance(value, InstanceValue):
+            walk(value.cls)
+            for attribute in value.attributes.values():
+                walk(attribute)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                walk(key)
+                walk(item)
+        elif isinstance(value, (list, tuple, set)):
+            for item in value:
+                walk(item)
+        elif hasattr(value, "__dict__"):
+            for item in vars(value).values():
+                walk(item)
+
+    walk(vm.globals)
+    for frame in vm.frames:
+        walk(frame.locals)
+        walk(frame.stack)
+        walk(frame.cells)
+        walk(frame.blocks)
+        walk(frame.finally_reasons)
 
 
 __all__ = [

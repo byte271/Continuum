@@ -274,7 +274,7 @@ source host recorded it; `NEW` is resolved on the current host.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 366 tests and is run natively on Linux x86_64, Apple
+The suite discovers 369 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple
