@@ -1,0 +1,1892 @@
+{
+  "case_records": [
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: assignment_chained.py:1: unsupported syntax Assign (chained assignment)",
+      "program": "assignment_chained",
+      "safe_point": null
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "frames": 6,
+      "program": "backtracking_subsets",
+      "safe_point": 11
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "frames": 5,
+      "program": "backtracking_subsets",
+      "safe_point": 23
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "frames": 5,
+      "program": "backtracking_subsets",
+      "safe_point": 34
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "frames": 5,
+      "program": "backtracking_subsets",
+      "safe_point": 46
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search"
+      ],
+      "frames": 3,
+      "program": "backtracking_subsets",
+      "safe_point": 57
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "search",
+        "search",
+        "search",
+        "search"
+      ],
+      "frames": 5,
+      "program": "backtracking_subsets",
+      "safe_point": 69
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "bytes_hex_digest",
+      "safe_point": 9
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: class_accumulator.py:6: unsupported syntax AugAssign (augmented assignment to non-name)",
+      "program": "class_accumulator",
+      "safe_point": null
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: comparison_chained.py:4: unsupported syntax Compare (chained comparison)",
+      "program": "comparison_chained",
+      "safe_point": null
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: comprehension_dict.py:1: unsupported syntax DictComp (expression)",
+      "program": "comprehension_dict",
+      "safe_point": null
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: comprehension_list.py:1: unsupported syntax ListComp (expression)",
+      "program": "comprehension_list",
+      "safe_point": null
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: comprehension_set.py:1: unsupported syntax SetComp (expression)",
+      "program": "comprehension_set",
+      "safe_point": null
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 24
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 48
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 72
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 96
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 120
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_nested_loops",
+      "safe_point": 144
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "control_try_finally",
+      "safe_point": 8
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 8
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 11
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 14
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_grouping",
+      "safe_point": 16
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 8
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 15
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 19
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_histogram",
+      "safe_point": 23
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "data_rolling_average",
+      "safe_point": 15
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "default_clamp_bounds",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 16,
+      "program": "default_memo_fibonacci",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 13,
+      "program": "default_memo_fibonacci",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 11,
+      "program": "default_memo_fibonacci",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 8,
+      "program": "default_memo_fibonacci",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 6,
+      "program": "default_memo_fibonacci",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "fibonacci",
+        "fibonacci"
+      ],
+      "frames": 3,
+      "program": "default_memo_fibonacci",
+      "safe_point": 15
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "default_parser_separator",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__",
+        "parse_record"
+      ],
+      "frames": 2,
+      "program": "default_parser_separator",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 27
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 54
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 81
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 107
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 134
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_coin_change",
+      "safe_point": 161
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 46
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 92
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 138
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 183
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 229
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "dynamic_lcs",
+      "safe_point": 275
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "exception_handler",
+      "safe_point": 15
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: fstring_conversion.py:2: unsupported syntax FormattedValue (f-string conversion)",
+      "program": "fstring_conversion",
+      "safe_point": null
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 13
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 17
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 21
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_breadth_first",
+      "safe_point": 26
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 18
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 24
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 30
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_depth_first",
+      "safe_point": 36
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_shared_cycle",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_shared_cycle",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_shared_cycle",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "graph_shared_cycle",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 13
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 17
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 21
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "hash_rolling",
+      "safe_point": 26
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 2
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 3
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 5
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 7
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 9
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
+      "program": "hash_sha256_chunks",
+      "safe_point": 10
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "ExecutionError: unhandled TypeError at iteration_dictionary.py:3: Continuum cannot checkpoint iteration over dict_items",
+      "program": "iteration_dictionary",
+      "safe_point": null
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 11
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_aggregate",
+      "safe_point": 14
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_transform",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_transform",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_transform",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "json_transform",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "keyword_only_format",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "kwargs_merge",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 20
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 30
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 41
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 51
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_matrix_multiply",
+      "safe_point": 61
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 162
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 324
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 486
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 647
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 809
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_primes",
+      "safe_point": 971
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_statistics",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_statistics",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_statistics",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_statistics",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "math_statistics",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 24
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 47
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 71
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 94
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 118
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "random_walk",
+      "safe_point": 141
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "recursion_factorial",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "recursion_fibonacci",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "recursion_mutual",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "recursion_mutual",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 8
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_binary",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 4
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 8
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "search_linear",
+      "safe_point": 12
+    },
+    {
+      "classification": "unsupported-by-language-frontend",
+      "detail": "CompileError: simulation_inventory.py:6: unsupported syntax AugAssign (augmented assignment to non-name)",
+      "program": "simulation_inventory",
+      "safe_point": null
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 23
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 45
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 68
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 91
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 114
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_bubble",
+      "safe_point": 136
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 13
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 20
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 26
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 33
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_insertion",
+      "safe_point": 39
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 18
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 27
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 36
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 45
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "sort_selection",
+      "safe_point": 54
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "starred_call",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "starred_call",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 10
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 15
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 19
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 24
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_bracket_balance",
+      "safe_point": 29
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_normalize",
+      "safe_point": 1
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_normalize",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 2
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 7
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 11
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_palindrome_scan",
+      "safe_point": 14
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 5
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 14
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 18
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 23
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_run_length",
+      "safe_point": 27
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 3
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 6
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 9
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 12
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 15
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "text_word_frequency",
+      "safe_point": 18
+    },
+    {
+      "classification": "accepted-and-correct",
+      "frame_chain": [
+        "__module__"
+      ],
+      "frames": 1,
+      "program": "varargs_total",
+      "safe_point": 1
+    }
+  ],
+  "cases": 204,
+  "checkpoints_per_program": 6,
+  "correctness_among_accepted_cases": 1.0,
+  "counts": {
+    "accepted-and-correct": 189,
+    "unsupported-by-language-frontend": 15
+  },
+  "cross_python": true,
+  "elapsed_seconds": 37.35,
+  "infrastructure_failures": 0,
+  "programs": 50,
+  "silent_mismatches": 0,
+  "source": {
+    "machine": "x86_64",
+    "os": "Linux",
+    "python_version": "3.12.13"
+  },
+  "target": {
+    "machine": "x86_64",
+    "os": "Linux",
+    "python_version": "3.13.14"
+  }
+}
