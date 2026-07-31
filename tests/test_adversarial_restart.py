@@ -7,8 +7,15 @@ import sys
 import tempfile
 import time
 import unittest
+import json
 import uuid
 from pathlib import Path
+
+from continuum.cli import (
+    DEMO_HOLD_SAFE_POINT,
+    DEMO_HOLD_SAFE_POINT_ENV,
+    DEMO_SYNC_ENV,
+)
 
 
 AUDITOR = r"""
@@ -82,6 +89,18 @@ class AdversarialRestartTests(unittest.TestCase):
         environment = os.environ.copy()
         environment["CONTINUUM_HOME"] = str(cls.root / "home")
         environment["PYTHONPATH"] = str(cls.repository)
+        # Hold the source at a safe point until the freeze request is on disk.
+        # Observing audit output and then racing `continuum freeze` let a fast
+        # host finish the workload first, which failed this proof outright in
+        # roughly one run in eight. The hold is an execution position, so the
+        # checkpoint lands in the same place on every host.
+        cls.sync = cls.root / "sync"
+        cls.sync.mkdir()
+        source_environment = {
+            **environment,
+            DEMO_SYNC_ENV: str(cls.sync),
+            DEMO_HOLD_SAFE_POINT_ENV: str(DEMO_HOLD_SAFE_POINT),
+        }
 
         auditor = subprocess.Popen(
             [sys.executable, "-c", AUDITOR, str(cls.audit_log)],
@@ -104,7 +123,7 @@ class AdversarialRestartTests(unittest.TestCase):
             stdout=auditor.stdin,
             stderr=subprocess.PIPE,
             cwd=cls.repository,
-            env=environment,
+            env=source_environment,
             text=True,
         )
         if source.stderr is None:
@@ -114,8 +133,20 @@ class AdversarialRestartTests(unittest.TestCase):
             raise AssertionError(f"missing session ID: {session_line}")
         session_id = session_line.split(": ", 1)[1]
         _wait_for_text(cls.audit_log, f"ACTION {cls.nonce} ITER_10")
+        # Wait for the held source to publish its readiness document.
+        deadline = time.monotonic() + 120
+        ready_path = cls.sync / "ready.json"
+        while time.monotonic() < deadline and not ready_path.exists():
+            if source.poll() is not None:
+                raise AssertionError("source exited before reaching its hold")
+            time.sleep(0.005)
+        if not ready_path.exists():
+            raise AssertionError("source never reached its hold safe point")
+        request_path = Path(
+            json.loads(ready_path.read_text(encoding="utf-8"))["request_path"]
+        )
 
-        freeze = subprocess.run(
+        freeze = subprocess.Popen(
             [
                 sys.executable,
                 "-m",
@@ -128,14 +159,22 @@ class AdversarialRestartTests(unittest.TestCase):
             cwd=cls.repository,
             env=environment,
             text=True,
-            capture_output=True,
-            timeout=30,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
+        # Only release the source once the request it must observe exists.
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and not request_path.exists():
+            if freeze.poll() is not None:
+                break
+            time.sleep(0.005)
+        (cls.sync / "start").touch()
+        freeze_stdout, freeze_stderr = freeze.communicate(timeout=120)
         if freeze.returncode != 0:
             source.kill()
             auditor.stdin.close()
             auditor.kill()
-            raise AssertionError(f"freeze failed: {freeze.stderr}")
+            raise AssertionError(f"freeze failed: {freeze_stderr or freeze_stdout}")
         cls.source_pid = source.pid
         source.wait(timeout=10)
         cls.source_returncode = source.returncode
