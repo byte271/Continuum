@@ -70,6 +70,40 @@ def _create_json_exclusive(path: Path, value: dict[str, Any]) -> None:
             pass
 
 
+PUBLISHED_READ_TIMEOUT_SECONDS = 5.0
+PUBLISHED_READ_POLL_SECONDS = 0.002
+
+
+def read_published_json(path: Path, timeout: float = PUBLISHED_READ_TIMEOUT_SECONDS):
+    """Read a document published by atomic replace or hard link.
+
+    Every control document in Continuum becomes visible at its final name in
+    one atomic step, so its contents are always complete. Windows adds a
+    separate hazard: for a short window around that step the name exists but
+    cannot be opened, and the failure surfaces as PermissionError/EACCES
+    rather than as a missing file. Antivirus and search indexers widen the
+    same window. Treat it as "not published yet" and retry.
+
+    This is the single reader used everywhere a published document is
+    consumed, so the behavior cannot drift between call sites.
+    """
+
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            raise
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+        except json.JSONDecodeError:
+            # An atomically published document is never partial, so this means
+            # the file is genuinely malformed. Do not retry.
+            raise
+        time.sleep(PUBLISHED_READ_POLL_SECONDS)
+
+
 def _uses_signal_notifications() -> bool:
     return os.name == "posix" and hasattr(signal, "SIGUSR1")
 
@@ -142,7 +176,7 @@ class SessionController:
         if not self.request_path.exists() or self.response_path.exists():
             return
         try:
-            request = json.loads(self.request_path.read_text(encoding="utf-8"))
+            request = read_published_json(self.request_path)
             if request.get("control_token") != self.control_token:
                 raise ContinuumError("invalid session control token")
             if request.get("command") != "freeze":
@@ -211,7 +245,7 @@ def list_sessions() -> list[dict[str, Any]]:
     result = []
     for path in sorted(directory.glob("cont-*.json")):
         try:
-            record = json.loads(path.read_text(encoding="utf-8"))
+            record = read_published_json(path)
         except (OSError, json.JSONDecodeError):
             continue
         if record.get("status") in {"running", "starting"}:
@@ -225,7 +259,7 @@ def list_sessions() -> list[dict[str, Any]]:
 def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
     record_path = continuum_home() / "sessions" / f"{session_id}.json"
     try:
-        record = json.loads(record_path.read_text(encoding="utf-8"))
+        record = read_published_json(record_path)
     except FileNotFoundError as exc:
         raise ContinuumError(f"unknown session: {session_id}") from exc
     except json.JSONDecodeError as exc:
@@ -269,12 +303,15 @@ def request_freeze(session_id: str, output_path: str) -> dict[str, Any]:
         while time.monotonic() < deadline:
             if response_path.exists():
                 try:
-                    response = json.loads(response_path.read_text(encoding="utf-8"))
+                    response = read_published_json(response_path)
+                except FileNotFoundError:
+                    # Cancelled between the check and the read; keep waiting.
+                    continue
                 except json.JSONDecodeError as exc:
                     raise ContinuumError("invalid freeze response") from exc
                 break
             try:
-                current = json.loads(record_path.read_text(encoding="utf-8"))
+                current = read_published_json(record_path)
             except (OSError, json.JSONDecodeError):
                 current = {}
             if current.get("status") not in {"running", "starting"}:

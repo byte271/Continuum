@@ -20,6 +20,7 @@ from continuum.cli import (
     _DemoStartGate,
 )
 from continuum.errors import ContinuumError
+from continuum.session import read_published_json
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 # How many complete demonstrations the repetition regression runs. The race
@@ -205,7 +206,7 @@ class CliDemoTests(unittest.TestCase):
                         time.sleep(0.005)
                     self.assertTrue(ready_path.exists(), "no readiness document")
 
-                    ready = json.loads(ready_path.read_text(encoding="utf-8"))
+                    ready = read_published_json(ready_path)
                     self.assertEqual(ready["pid"], gated.pid)
                     self.assertGreaterEqual(
                         ready["safe_points_executed"], DEMO_HOLD_SAFE_POINT

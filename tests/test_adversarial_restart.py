@@ -11,6 +11,7 @@ import json
 import uuid
 from pathlib import Path
 
+from continuum.session import read_published_json
 from continuum.cli import (
     DEMO_HOLD_SAFE_POINT,
     DEMO_HOLD_SAFE_POINT_ENV,
@@ -142,9 +143,7 @@ class AdversarialRestartTests(unittest.TestCase):
             time.sleep(0.005)
         if not ready_path.exists():
             raise AssertionError("source never reached its hold safe point")
-        request_path = Path(
-            json.loads(ready_path.read_text(encoding="utf-8"))["request_path"]
-        )
+        request_path = Path(read_published_json(ready_path)["request_path"])
 
         freeze = subprocess.Popen(
             [

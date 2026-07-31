@@ -20,6 +20,7 @@ from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
 from .resources import is_portable_absolute_path
 from .session import (
     SessionController,
+    read_published_json,
     continuum_home,
     list_sessions,
     request_freeze,
@@ -796,13 +797,7 @@ def _wait_for_demo_ready(
     deadline = time.monotonic() + DEMO_READY_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if ready_path.exists():
-            try:
-                return _validate_demo_ready(ready_path, stderr_path)
-            except PermissionError:
-                # Windows raises EACCES when the atomic replace publishing this
-                # document overlaps the open. The document is about to be
-                # readable, so keep waiting rather than failing the run.
-                pass
+            return _validate_demo_ready(ready_path, stderr_path)
         if process.poll() is not None:
             raise ContinuumError(
                 "demo source exited before reaching its held safe point "
@@ -823,11 +818,7 @@ def _wait_for_demo_ready(
 
 def _validate_demo_ready(ready_path: Path, stderr_path: Path) -> dict[str, Any]:
     try:
-        ready = json.loads(ready_path.read_text(encoding="utf-8"))
-    except PermissionError:
-        # Left for the caller to retry: on Windows this means the atomic
-        # replace that publishes the document is still in flight.
-        raise
+        ready = read_published_json(ready_path)
     except (OSError, json.JSONDecodeError) as exc:
         raise ContinuumError(
             f"cannot read demo readiness document {ready_path}: {exc}"

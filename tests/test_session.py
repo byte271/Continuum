@@ -9,11 +9,13 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 from unittest.mock import patch
 
 from continuum.compiler import compile_source
 from continuum.errors import ContinuumError, FrozenExecution
 from continuum.session import (
+    read_published_json,
     SessionController,
     _create_json_exclusive,
     request_freeze,
@@ -236,6 +238,64 @@ while index < 10:
                 return
             time.sleep(0.005)
         raise AssertionError("timed out waiting for condition")
+
+
+class PublishedDocumentReadTests(unittest.TestCase):
+    """The shared reader for atomically published control documents.
+
+    v0.3.0 failed intermittently on Windows because a reader opened a document
+    during the atomic replace that published it and treated the resulting
+    EACCES as fatal. Every published document is now read through one helper.
+    """
+
+    def test_reads_a_published_document(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "doc.json"
+            path.write_text('{"ok": true}', encoding="utf-8")
+            self.assertEqual(read_published_json(path), {"ok": True})
+
+    def test_retries_while_the_publication_is_in_flight(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "doc.json"
+            path.write_text('{"ok": true}', encoding="utf-8")
+            attempts = []
+            real = Path.read_text
+
+            def flaky(self, *args, **kwargs):
+                attempts.append(1)
+                if len(attempts) < 3:
+                    raise PermissionError(13, "in flight")
+                return real(self, *args, **kwargs)
+
+            with mock.patch.object(Path, "read_text", flaky):
+                self.assertEqual(read_published_json(path), {"ok": True})
+            self.assertEqual(len(attempts), 3)
+
+    def test_gives_up_after_the_timeout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "doc.json"
+            path.write_text("{}", encoding="utf-8")
+
+            def always_locked(self, *args, **kwargs):
+                raise PermissionError(13, "locked")
+
+            with mock.patch.object(Path, "read_text", always_locked):
+                with self.assertRaises(PermissionError):
+                    read_published_json(path, timeout=0.05)
+
+    def test_malformed_document_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "doc.json"
+            path.write_text("{not json", encoding="utf-8")
+            # Atomic publication means a readable document is never partial,
+            # so this is corruption and must fail immediately.
+            with self.assertRaises(json.JSONDecodeError):
+                read_published_json(path, timeout=5.0)
+
+    def test_missing_document_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(FileNotFoundError):
+                read_published_json(Path(temporary) / "absent.json", timeout=5.0)
 
 
 if __name__ == "__main__":
