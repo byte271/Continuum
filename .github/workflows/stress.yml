@@ -108,7 +108,8 @@ jobs:
       - name: Documentation consistency
         if: always()
         shell: bash
-        run: "$PYBIN" -m unittest tests.test_documentation_consistency
+        run: |
+          "$PYBIN" -m unittest tests.test_documentation_consistency
 
       - name: Compatibility corpus
         if: always()
