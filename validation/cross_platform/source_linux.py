@@ -29,6 +29,9 @@ from common import (
 )
 from qualification import qualify_linux_source
 
+# See the comment where this is used.
+PROOF_HOLD_SAFE_POINT = 24_000
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from continuum._harness import (  # noqa: E402
     environment_for as harness_environment,
@@ -285,7 +288,15 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
     nonce = uuid.uuid4().hex
     sync_dir = output / "harness-sync"
     sync_dir.mkdir(parents=True, exist_ok=True)
-    source_environment = harness_environment(sync_dir, environment)
+    # Measured against examples/cross_platform_proof.py: its 5,000-entry build
+    # loop dominates the first ~15,000 safe points, and the thirtieth recorded
+    # action lands at safe point 22,737. The hold must be after that, or the
+    # source stops before the proof's required work and the run deadlocks
+    # waiting for an action that can no longer be printed. 24,000 sits between
+    # the thirtieth action and the fortieth (25,308).
+    source_environment = harness_environment(
+        sync_dir, environment, hold_safe_point=PROOF_HOLD_SAFE_POINT
+    )
     source_started_at = utc_now()
     source_started_ns = time.time_ns()
     with stdout_log.open("wb", buffering=0) as stdout:
@@ -317,13 +328,12 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
                 + first_stderr.decode("utf-8", errors="replace")
             )
         session_id = first_stderr.decode("utf-8").strip().split(": ", 1)[1]
-        # Real actions must occur before the hold, so the checkpoint is taken
-        # mid-computation rather than at startup. This wait is evidence, not
-        # synchronization: the hold below is what guarantees the source is
-        # still alive when the freeze request lands.
-        wait_for(stdout_log, f"ACTION {nonce} ITER 30", source, 120)
-        os.fsync(stdout.fileno())
+        # No marker wait here. The hold position already guarantees the
+        # required work happened, and waiting for a marker the held source has
+        # not reached yet would deadlock. The action count is verified from the
+        # audit record after release instead.
         ready = harness_wait_for_ready(source, sync_dir)
+        os.fsync(stdout.fileno())
         freeze_evidence = harness_freeze_held_source(
             [sys.executable, "-m", "continuum"],
             session_id,

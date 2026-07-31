@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -144,6 +145,25 @@ class SourceSideFreezeOrchestrationTests(unittest.TestCase):
 
     def test_default_hold_is_past_real_work_for_the_demo_workload(self):
         self.assertGreater(DEFAULT_HOLD_SAFE_POINT, 15_025)
+
+    def test_proof_hold_is_past_the_action_the_proof_requires(self):
+        """The hold must not stop the source before its required work.
+
+        The proof waits for a thirtieth recorded action. A hold placed before
+        that point stops the source, the action is never printed, and the run
+        deadlocks: that is exactly how run 30604486120 failed. ITER 30 is at
+        safe point 22,737 and ITER 40 at 25,308 for the proof workload.
+        """
+        source = (
+            ROOT / "validation" / "cross_platform" / "source_linux.py"
+        ).read_text(encoding="utf-8")
+        match = re.search(r"PROOF_HOLD_SAFE_POINT = ([0-9_]+)", source)
+        self.assertIsNotNone(match, "proof hold constant is missing")
+        hold = int(match.group(1).replace("_", ""))
+        self.assertGreater(hold, 22_737, "hold precedes the thirtieth action")
+        self.assertLess(hold, 25_308, "hold is later than necessary")
+        # And the deadlocking wait must not come back.
+        self.assertNotIn("wait_for(stdout_log", source)
 
 
 if __name__ == "__main__":
