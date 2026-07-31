@@ -86,8 +86,7 @@ jobs:
             tests.test_process_independent \
             tests.test_harness_hold \
             tests.test_anti_replay_controls \
-            tests.test_session.PublishedDocumentReadTests \
-            tests.test_static_checks; do
+            tests.test_session.PublishedDocumentReadTests; do
             pass=0; fail=0
             for i in $(seq 1 "$REPEATS"); do
               if "$PYBIN" -m unittest "$target" > "stress-logs/${target}-${i}.log" 2>&1; then
@@ -112,6 +111,13 @@ jobs:
           echo "--- per-target summary ---"
           cat stress-logs/summary.txt
           exit "$status"
+
+      - name: Static checks
+        if: always()
+        shell: bash
+        run: |
+          # Deterministic, so it runs once and its output stays visible.
+          "$PYBIN" -m unittest -v tests.test_static_checks
 
       - name: Documentation consistency
         if: always()
