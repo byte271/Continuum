@@ -12,3 +12,6 @@ evidence-runs/
 build/
 dist/
 *.egg-info/
+
+# Tooling scratch, not part of the project.
+uv.lock
