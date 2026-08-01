@@ -786,9 +786,15 @@ def parser() -> argparse.ArgumentParser:
     # could not reproduce the archived evidence.
     root.add_argument("--checkpoints", type=int, default=6)
     root.add_argument("--program", action="append", default=[])
+    # Per-process by default. Image names inside are deterministic
+    # (`{stem}-{safe_point}.cont`), so two concurrent local runs sharing one
+    # directory would overwrite and delete each other's images. CI always
+    # passes `--workdir` explicitly, so this only affects local use.
     root.add_argument(
         "--workdir",
-        default=str(Path(tempfile.gettempdir()) / "continuum-differential"),
+        default=str(
+            Path(tempfile.gettempdir()) / f"continuum-differential-{os.getpid()}"
+        ),
     )
     root.add_argument(
         "--output",

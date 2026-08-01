@@ -495,7 +495,12 @@ class StructuralRefusalTests(ImageRefusalCase):
             # warns about it. Scoped here so the warning cannot be mistaken for
             # one the runtime emitted, and so a real warning still stands out.
             with warnings.catch_warnings():
-                warnings.simplefilter("ignore", UserWarning)
+                # Matched on message, not category alone: a blanket UserWarning
+                # filter would also swallow an unrelated future warning from
+                # this same write, which is the opposite of the intent.
+                warnings.filterwarnings(
+                    "ignore", category=UserWarning, message=r"Duplicate name: "
+                )
                 archive.writestr("manifest.json", entries["manifest.json"])
         with self.assertRaises(ImageError):
             load_image(duplicate)
