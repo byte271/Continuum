@@ -146,8 +146,8 @@ class FunctionIdentityTests(unittest.TestCase):
         """Losing a captured cell changes what the frame needs to exist."""
         changed = BASE.replace("        return value + base", "        return value + 3")
         self.assertNotEqual(
-            self.semantic_ids(BASE)["make_bias/bias"],
-            self.semantic_ids(changed)["make_bias/bias"],
+            self.semantic_ids(BASE)["__module__/make_bias/bias"],
+            self.semantic_ids(changed)["__module__/make_bias/bias"],
         )
 
     def test_no_program_is_ambiguous_by_default(self):
@@ -195,8 +195,15 @@ class SafepointIdentityTests(unittest.TestCase):
             checked += 1
         self.assertGreater(checked, 50)
 
-    def test_identically_shaped_siblings_are_reported_as_ambiguous(self):
-        """Duplicated structure must be detected, not silently disambiguated."""
+    def test_occurrence_indexing_keeps_identically_shaped_siblings_distinct(self):
+        """Duplicated structure is separated by occurrence, not collapsed.
+
+        Named for what it checks. It does not inspect any reported ambiguity,
+        and there is none to inspect: two identically shaped sibling statements
+        differ by occurrence index, so each still resolves uniquely inside one
+        revision. The cross-revision consequence -- a changed occurrence count
+        -- is what the second half covers.
+        """
         duplicated = BASE.replace(
             '        print(f"ACTION {index}")',
             '        print(f"ACTION {index}")\n        print(f"ACTION {index}")',
@@ -228,15 +235,30 @@ class SafepointIdentityTests(unittest.TestCase):
         self.assertEqual(original_leaf.semantic_id, leaf.semantic_id)
 
     def test_a_moved_resume_point_across_a_control_boundary_does_not_match(self):
-        """Wrapping the active statement in a new loop changes its region."""
-        model, function, point = active_site(BASE, LEAF, "SAFEPOINT")
+        """Wrapping the active statement in a new loop changes its region.
+
+        The resume point has to be the statement that moves. This previously
+        took the first safe point in `leaf`, which is `index = 0` -- outside the
+        loop and untouched by an edit to the loop body -- and then asserted only
+        that at most one location matched. It matched, exactly as it should
+        have, so the assertion could not fail for the behavior it names.
+        """
+        # Occurrence 2 is the `print(f"ACTION {index}")` statement, inside the
+        # while body: the statement the edit below actually wraps.
+        model, function, point = active_site(BASE, LEAF, "SAFEPOINT", occurrence=2)
+        self.assertTrue(
+            point.evidence()["control_region_path"],
+            "the chosen resume point must start inside a control region",
+        )
         wrapped = BASE.replace(
-            "        bag.append(bias(index))",
-            "        for _ in range(1):\n            bag.append(bias(index))",
+            '        print(f"ACTION {index}")',
+            '        for _ in range(1):\n            print(f"ACTION {index}")',
         )
         after = analyze(wrapped, "p.py")
         matches = after.resolve_safepoint(function.semantic_id, point.semantic_id)
-        self.assertLessEqual(len(matches), 1)
+        self.assertEqual(
+            matches, [], "a resume point moved into a new loop must not match"
+        )
 
     def test_region_path_distinguishes_inside_a_loop_from_outside_it(self):
         model = analyze(BASE, "p.py")
@@ -329,16 +351,121 @@ class BindingIdentityTests(unittest.TestCase):
         self.assertNotIn(target, after.binding_ids(after_leaf.semantic_id))
 
 
+NESTED = """
+def outer(n):
+    def inner(a):
+        def helper(x):
+            return x + a
+        return helper(n)
+    return inner(n)
+
+
+def other(n):
+    def inner(a):
+        def helper(x):
+            return x + a
+        return helper(n)
+    return inner(n)
+
+
+answer = outer(2)
+"""
+
+
+class LexicalScopeIdentityTests(unittest.TestCase):
+    """Function identity must use the whole lexical chain, not one parent name.
+
+    An IR identifier is `parent.name@line`, where `parent` is only the
+    immediately enclosing scope's display name. Deriving the scope path from
+    that string reduces both `outer.inner.helper` and `other.inner.helper` to
+    `("inner", "helper")`. With the same signature and the same captured names,
+    the two collapse onto one semantic identity, and a re-nesting edit in which
+    each revision is individually unambiguous binds an active frame to the
+    wrong function.
+    """
+
+    def paths(self, source):
+        model = analyze(source, "p.py")
+        return {
+            ir_id: (identity.scope_path, identity.semantic_id)
+            for ir_id, identity in model.by_ir_id.items()
+        }
+
+    def test_the_scope_path_is_the_full_chain(self):
+        found = {path for path, _ in self.paths(NESTED).values()}
+        self.assertIn(("__module__", "outer", "inner", "helper"), found)
+        self.assertIn(("__module__", "other", "inner", "helper"), found)
+
+    def test_identically_shaped_functions_under_different_ancestors_differ(self):
+        by_path = {path: sid for path, sid in self.paths(NESTED).values()}
+        left = by_path[("__module__", "outer", "inner", "helper")]
+        right = by_path[("__module__", "other", "inner", "helper")]
+        self.assertNotEqual(
+            left,
+            right,
+            "two helpers differing only in an outer ancestor share an identity",
+        )
+
+    def test_a_re_nesting_edit_does_not_silently_rebind(self):
+        """Each revision is unambiguous, so only the full chain can refuse."""
+        # Revision A defines the helper under `outer` only.
+        revision_a = NESTED.replace(
+            """
+
+def other(n):
+    def inner(a):
+        def helper(x):
+            return x + a
+        return helper(n)
+    return inner(n)
+""",
+            "",
+        )
+        # Revision B defines exactly the same helper under `other` instead.
+        revision_b = revision_a.replace("def outer(n):", "def other(n):").replace(
+            "answer = outer(2)", "answer = other(2)"
+        )
+        before = analyze(revision_a, "p.py")
+        after = analyze(revision_b, "p.py")
+
+        source_helper = next(
+            identity
+            for identity in before.by_ir_id.values()
+            if identity.scope_path[-1] == "helper"
+        )
+        target_helper = next(
+            identity
+            for identity in after.by_ir_id.values()
+            if identity.scope_path[-1] == "helper"
+        )
+        self.assertEqual(source_helper.scope_path[-2:], ("inner", "helper"))
+        self.assertEqual(target_helper.scope_path[-2:], ("inner", "helper"))
+        self.assertNotEqual(
+            source_helper.semantic_id,
+            target_helper.semantic_id,
+            "a helper re-nested under a different ancestor kept its identity",
+        )
+
+    def test_annotation_still_changes_no_ir_byte(self):
+        from continuum.compiler import compile_source, compile_with_sites
+
+        plain = compile_source(NESTED, "p.py")
+        annotated, _sites, scope_paths = compile_with_sites(NESTED, "p.py")
+        self.assertEqual(plain, annotated)
+        self.assertEqual(set(scope_paths), set(annotated["functions"]))
+
+
 class AnnotationIntegrityTests(unittest.TestCase):
     def test_annotation_does_not_change_the_ir(self):
         from continuum.compiler import compile_source, compile_with_sites
 
         plain = compile_source(BASE, "p.py")
-        annotated, sites = compile_with_sites(BASE, "p.py")
+        annotated, sites, scope_paths = compile_with_sites(BASE, "p.py")
         self.assertEqual(plain, annotated)
         for function_id, definition in annotated["functions"].items():
             with self.subTest(function=function_id):
                 self.assertEqual(len(sites[function_id]), len(definition["code"]))
+                self.assertIn(function_id, scope_paths)
 
     def test_recompiling_a_mismatched_source_is_refused(self):
         from continuum.compiler import compile_source

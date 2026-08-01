@@ -912,6 +912,13 @@ class ProgramCompiler:
         # `code`. Kept beside the IR rather than inside it, so enabling
         # annotation cannot change a single byte of a produced image.
         self.sites: dict[str, list[Any]] = {}
+        # function_id -> the full chain of enclosing scope names, outermost
+        # first. An IR function_id names only its immediate parent, so it
+        # cannot distinguish `outer.inner.helper` from `other.inner.helper`.
+        # Like `sites`, this lives beside the IR: recording it changes no byte
+        # of a produced image, so an image written before semantic identity
+        # existed can still be annotated by recompiling the source it carries.
+        self.scope_paths: dict[str, tuple[str, ...]] = {}
         self.imports: set[str] = set()
 
     def compile(self) -> dict[str, Any]:
@@ -924,6 +931,7 @@ class ProgramCompiler:
         self.scopes = {}
         self._index_scopes(module_scope)
         module_names = collect_local_names(tree.body, [])
+        self.scope_paths["__module__"] = ("__module__",)
         module = FunctionCompiler(
             self,
             "__module__",
@@ -998,6 +1006,12 @@ class ProgramCompiler:
         if parent.function_id != "__module__":
             enclosing_locals = (*enclosing_locals, parent.local_names)
         scope = self.scopes[id(node)]
+        # Recorded before the body is compiled: a function nested inside this
+        # one resolves its own chain by looking this entry up.
+        self.scope_paths[function_id] = (
+            *self.scope_paths[parent.function_id],
+            node.name,
+        )
         compiler = FunctionCompiler(
             self,
             function_id,
@@ -1034,15 +1048,18 @@ def compile_source(source: str, source_name: str) -> dict[str, Any]:
 
 def compile_with_sites(
     source: str, source_name: str
-) -> tuple[dict[str, Any], dict[str, list[Any]]]:
-    """Compile, and also return the semantic site of every instruction.
+) -> tuple[dict[str, Any], dict[str, list[Any]], dict[str, tuple[str, ...]]]:
+    """Compile, and also return the semantic annotations beside the IR.
 
-    The IR returned here is identical to `compile_source`'s -- the sites live in
-    a separate table. That is what allows an image written by an older runtime,
-    with no notion of semantic identity, to be annotated after the fact by
-    recompiling the source it already carries.
+    Returns the IR, the semantic site of every instruction, and the full
+    lexical scope chain of every function.
+
+    The IR returned here is identical to `compile_source`'s -- the annotations
+    live in separate tables. That is what allows an image written by an older
+    runtime, with no notion of semantic identity, to be annotated after the
+    fact by recompiling the source it already carries.
     """
 
     compiler = ProgramCompiler(source, source_name)
     ir = compiler.compile()
-    return ir, compiler.sites
+    return ir, compiler.sites, compiler.scope_paths

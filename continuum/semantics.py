@@ -251,24 +251,33 @@ def _collect_classes(
     return by_semantic, by_ir, ambiguous
 
 
-def _scope_path(ir: dict[str, Any], ir_function_id: str) -> tuple[str, ...]:
-    """Lexical nesting chain, taken from the IR's qualified identifiers.
+def _scope_path(
+    scope_paths: dict[str, tuple[str, ...]], ir_function_id: str
+) -> tuple[str, ...]:
+    """The function's full lexical nesting chain, outermost scope first.
 
-    The IR encodes a function as `parent.name@line`. The line component is
-    dropped here: it is exactly the part that is not stable across revisions.
-    What remains is the chain of enclosing scope names, which is structural.
+    This is taken from the compiler's own scope tree, not parsed out of the IR
+    identifier. An IR identifier is `parent.name@line`, where `parent` is only
+    the immediately enclosing scope's display name, so `outer.inner.helper` and
+    `other.inner.helper` both reduce to `("inner", "helper")`. Two functions
+    that agree on that truncated path, their signature, and their captured
+    names would share one semantic identity, and a migration in which each
+    revision is individually unambiguous would then bind an active frame to the
+    wrong function.
+
+    The line component is still excluded: it is exactly the part that is not
+    stable across revisions.
     """
 
-    if ir_function_id == "__module__":
-        return ("__module__",)
-    qualified = ir_function_id.split("@", 1)[0]
-    return tuple(qualified.split("."))
+    # The IR and this table come from the same compiler run, so every function
+    # in one is in the other.
+    return scope_paths[ir_function_id]
 
 
 def analyze(source: str, source_name: str) -> ProgramSemantics:
     """Compute every semantic identity for one source revision."""
 
-    ir, sites = compile_with_sites(source, source_name)
+    ir, sites, scope_paths = compile_with_sites(source, source_name)
     semantics = ProgramSemantics(source=source, source_name=source_name, ir=ir)
 
     claims: dict[str, list[str]] = {}
@@ -282,7 +291,7 @@ def analyze(source: str, source_name: str) -> ProgramSemantics:
             "default_count": definition.get("default_count", 0),
             "kw_default_names": list(definition.get("kw_default_names", [])),
         }
-        scope_path = _scope_path(ir, ir_function_id)
+        scope_path = _scope_path(scope_paths, ir_function_id)
         freevars = tuple(definition.get("freevars", []))
         cellvars = tuple(definition.get("cellvars", []))
         semantic_id = _digest(
