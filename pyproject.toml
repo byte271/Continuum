@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "continuum-state"
-version = "0.4.0a1"
+version = "0.5.0a1"
 description = "Portable continuation images for a controlled pure-Python runtime"
 readme = "README.md"
 # Coarse install-time filter only. The authoritative gate is the exact

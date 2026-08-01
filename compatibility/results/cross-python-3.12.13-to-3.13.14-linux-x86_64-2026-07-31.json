@@ -937,43 +937,43 @@
       "safe_point": 26
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 2
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 3
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 5
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 7
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 9
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "unsupported-live-object-at-checkpoint",
       "detail": "UnsupportedObjectError: unsupported live object: _hashlib.HASH",
       "program": "hash_sha256_chunks",
       "safe_point": 10
     },
     {
-      "classification": "unsupported-by-language-frontend",
+      "classification": "program-runtime-failure",
       "detail": "ExecutionError: unhandled TypeError at iteration_dictionary.py:3: Continuum cannot checkpoint iteration over dict_items",
       "program": "iteration_dictionary",
       "safe_point": null
@@ -1872,11 +1872,18 @@
   "correctness_among_accepted_cases": 1.0,
   "counts": {
     "accepted-and-correct": 189,
-    "unsupported-by-language-frontend": 15
+    "program-runtime-failure": 1,
+    "unsupported-by-language-frontend": 8,
+    "unsupported-live-object-at-checkpoint": 6
   },
   "cross_python": true,
-  "elapsed_seconds": 37.35,
+  "elapsed_seconds": 51.14,
   "infrastructure_failures": 0,
+  "out_of_scope": {
+    "program-runtime-failure": 1,
+    "unsupported-by-language-frontend": 8,
+    "unsupported-live-object-at-checkpoint": 6
+  },
   "programs": 50,
   "silent_mismatches": 0,
   "source": {

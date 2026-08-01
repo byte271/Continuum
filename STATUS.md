@@ -1,6 +1,6 @@
 # Status
 
-Version: 0.4.0a1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · CPython 3.12.13 and 3.13.14
+Version: 0.5.0a1 · IR 0.4 · image format 0.2 · execution ABI 1.0 · migration plan 1.0 · CPython 3.12.13 and 3.13.14
 Updated: 2026-07-31
 
 ## Platform matrix
@@ -18,6 +18,18 @@ has no Windows job.
 
 ## WORKING
 
+- **Verified live source-code migration.** An image frozen from revision A on
+  native Linux x86_64 under CPython 3.12.13 was migrated onto revision B and
+  resumed on a native Apple Silicon macOS arm64 runner under CPython 3.13.14.
+  Actions run
+  [30682958879](https://github.com/byte271/Continuum/actions/runs/30682958879),
+  evaluated on merge commit `d328397`. Four active frames and twenty bindings
+  mapped totally,
+  the original image byte-identical throughout, 30 action nonces each executed
+  exactly once, zero repeated, the old revision's future behavior absent and
+  the new revision's present, judged against an independently stated oracle
+  with zero failures. Driven entirely through the public CLI:
+  `plan-upgrade`, `verify-upgrade`, `resume --upgrade`.
 - **Verified cross-Python continuation, through the public CLI.** A program
   frozen on native Linux x86_64 under CPython 3.12.13 was verified and resumed
   on a native Apple Silicon macOS arm64 runner under CPython 3.13.14, after the
@@ -36,8 +48,9 @@ has no Windows job.
   requirement. Format 0.1 images keep their original exact-version rule.
 - Cross-Python differential corpus: 204 cases over 50 programs, CPython
   3.12.13 → 3.13.14, 189 accepted and correct, **0 silent mismatches**, 0
-  infrastructure failures, live frame depth to 16. 15 cases are language
-  frontend gaps, reported separately.
+  infrastructure failures, live frame depth to 16. The remaining 15 are
+  reported separately and split by reason: 8 language frontend gaps, 6 an
+  unsupported live object at the checkpoint, 1 a program runtime failure.
 - Verified cross-platform continuation from a native x86_64 Linux
   GitHub-hosted VM to a native Apple Silicon macOS arm64 GitHub-hosted runner.
   Actions run
@@ -99,7 +112,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 313 tests discovered. Tests skip only where the host
+- Current full suite: 402 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

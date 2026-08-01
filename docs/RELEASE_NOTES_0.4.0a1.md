@@ -84,9 +84,12 @@ Every refusal carries a stable machine-readable reason code.
 - Cross-Python differential corpus, 3.12.13 → 3.13.14: 204 cases over 50
   programs — 189 accepted and correct, **0 silent mismatches**, 0 infrastructure
   failures, live frame depth to 16, 11 distinct frame chains.
-  Correctness among accepted cases: **100%**. The 15 remaining cases are 10
-  programs the language frontend does not compile, reported separately and
-  excluded from that rate.
+  Correctness among accepted cases: **100%**. The 15 remaining cases are
+  reported separately and excluded from that rate. Reclassified after 0.4.0a1
+  shipped, when review found all three reasons were being labelled as a
+  frontend gap: 8 are programs the language frontend does not compile, 6 hold
+  an unsupported live object at the checkpoint, and 1 is a program runtime
+  failure. The accepted count and the zero-mismatch result are unchanged.
   Raw: `compatibility/results/cross-python-3.12.13-to-3.13.14-linux-x86_64-2026-07-31.json`.
 - Full suite: 302 tests, green on CPython 3.12.13 and 3.13.14.
 - The differential comparison is itself fault-injected: each compared dimension

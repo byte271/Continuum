@@ -90,3 +90,31 @@ gates on every host, so the full corpus rate is not a Windows or macOS
 measurement.
 
 See [STATUS.md](STATUS.md) and [PORTABILITY.md](PORTABILITY.md).
+
+## Live source-code migration (experimental)
+
+Only the accepted edit classes in COMPATIBILITY.md are migrated; everything
+else is refused, and refusal is the default for anything the mapper cannot
+prove safe.
+
+Two limits are worth stating plainly because they are not obvious:
+
+**Edits to already-completed effects are accepted, not refused.** If a
+statement executed before the checkpoint, editing it in the new revision has no
+effect on the resumed run, and Continuum does not detect that and does not
+refuse it. The migration is still sound -- nothing is replayed and nothing is
+corrupted -- but an author who edits a line that already ran will see the old
+behavior in the combined output and no diagnostic saying why. Detecting this in
+general would require knowing which statements have executed, which a resume
+position alone does not tell you for code inside a loop. This is a mandatory
+refusal case that is **not** implemented.
+
+**A refusal is not proof that an edit is unsafe.** The accepted-edit set is
+deliberately narrow, so edits that are in fact harmless are refused when the
+mapper cannot prove them safe. In a full sweep of one revision pair across
+every applicable safe point, one position out of 197 refused an edit that a
+person would consider acceptable, because execution had reached the very
+statement being changed.
+
+Migration is verified for one workload, one platform pair, and the revision
+pairs in `validation/live_migration/`. It is not a general hot-reload facility.

@@ -35,6 +35,16 @@ from ._harness import (
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
 from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
+from .migration import (
+    PLAN_FORMAT_VERSION,
+    apply_plan,
+    load_verified_plan,
+    plan_upgrade as build_upgrade_plan,
+    read_plan,
+    sha256_file,
+    verify_plan,
+    write_plan,
+)
 from .resources import is_portable_absolute_path
 from .session import (
     SessionController,
@@ -141,8 +151,33 @@ def _parser() -> argparse.ArgumentParser:
     )
     verify.add_argument("image")
 
+    plan_upgrade = subparsers.add_parser(
+        "plan-upgrade", help="plan a migration of an image onto new source"
+    )
+    plan_upgrade.add_argument("image")
+    plan_upgrade.add_argument("new_program")
+    plan_upgrade.add_argument("-o", "--output", required=True)
+
+    inspect_upgrade = subparsers.add_parser(
+        "inspect-upgrade", help="inspect a migration plan without applying it"
+    )
+    inspect_upgrade.add_argument("plan")
+
+    verify_upgrade = subparsers.add_parser(
+        "verify-upgrade",
+        help="independently re-derive a migration plan and confirm it matches",
+    )
+    verify_upgrade.add_argument("image")
+    verify_upgrade.add_argument("plan")
+
     resume = subparsers.add_parser("resume", help="restore an image in this process")
     resume.add_argument("image")
+    resume.add_argument(
+        "--upgrade",
+        default=None,
+        metavar="PLAN",
+        help="apply a verified migration plan before resuming",
+    )
     resume.add_argument(
         "--file-policy", choices=("strict", "relocate", "bundle"), default=None
     )
@@ -173,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
             return _inspect(args)
         if args.command == "verify":
             return _verify(args)
+        if args.command == "plan-upgrade":
+            return _plan_upgrade(args)
+        if args.command == "inspect-upgrade":
+            return _inspect_upgrade(args)
+        if args.command == "verify-upgrade":
+            return _verify_upgrade(args)
         if args.command == "resume":
             return _resume(args)
         raise AssertionError(args.command)
@@ -933,6 +974,72 @@ def _verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _plan_upgrade(args: argparse.Namespace) -> int:
+    _require_runtime_version()
+    plan = build_upgrade_plan(args.image, args.new_program)
+    new_source = Path(args.new_program).read_text(encoding="utf-8")
+    write_plan(
+        args.output,
+        plan,
+        new_source,
+        compile_source(new_source, plan["entry_program"]),
+    )
+    print(f"Migration plan: {args.output}")
+    print(f"Plan format version: {plan['plan_format_version']}")
+    print(f"Execution ABI: {plan['execution_abi_version']}")
+    print(f"Original image SHA-256: {plan['original_image_sha256']}")
+    print(f"New source SHA-256: {plan['new_source_sha256']}")
+    print(f"Active frames mapped: {plan['active_frames']}")
+    print(f"Active bindings mapped: {len(plan['binding_mappings'])}")
+    print(f"Control regions mapped: {len(plan['control_region_mappings'])}")
+    print(f"Classes mapped: {len(plan['class_mappings'])}")
+    print(f"Accepted edit classes: {', '.join(plan['accepted_edit_classes']) or 'none'}")
+    print(f"Mapping is total: {plan['mapping_is_total']}")
+    return 0
+
+
+def _inspect_upgrade(args: argparse.Namespace) -> int:
+    plan, _new_source, _new_ir = read_plan(args.plan)
+    print(f"Migration plan: {args.plan}")
+    print(f"Plan format version: {plan['plan_format_version']}")
+    print(f"Semantic model version: {plan['semantic_model_version']}")
+    print(f"Execution ABI: {plan['execution_abi_version']}")
+    print(f"Original image SHA-256: {plan['original_image_sha256']}")
+    print(f"Old source SHA-256: {plan['old_source_sha256']}")
+    print(f"Old IR SHA-256: {plan['old_ir_sha256']}")
+    print(f"New source SHA-256: {plan['new_source_sha256']}")
+    print(f"New IR SHA-256: {plan['new_ir_sha256']}")
+    print(f"Active frames mapped: {plan['active_frames']}")
+    print(f"Mapping is total: {plan['mapping_is_total']}")
+    print(f"Accepted edit classes: {', '.join(plan['accepted_edit_classes']) or 'none'}")
+    for mapping in plan["frame_mappings"]:
+        scope = "/".join(mapping["evidence"]["old_function"]["scope_path"])
+        print(
+            f"  frame {mapping['frame_depth']} {scope}: "
+            f"pc {mapping['old_pc']} -> {mapping['new_pc']}, "
+            f"stack {mapping['operand_stack_depth']}, "
+            f"blocks {len(mapping['control_blocks'])}"
+        )
+    for assumption in plan["assumptions"]:
+        print(f"  assumption: {assumption}")
+    return 0
+
+
+def _verify_upgrade(args: argparse.Namespace) -> int:
+    _require_runtime_version()
+    report = verify_plan(args.image, args.plan)
+    print(f"Migration plan: {args.plan}")
+    print("Verification: passed")
+    print(f"Integrity: {report['integrity']}")
+    print(f"Independently re-derived: {report['independently_rederived']}")
+    print(f"Execution ABI: {report['execution_abi_version']}")
+    print(f"Original image SHA-256: {report['original_image_sha256']}")
+    print(f"Active frames mapped: {report['active_frames']}")
+    print(f"Mapping is total: {report['mapping_is_total']}")
+    print(f"Execution: {report['execution']}")
+    return 0
+
+
 def _resume(args: argparse.Namespace) -> int:
     _require_runtime_version()
     relocations = {}
@@ -984,6 +1091,23 @@ def _resume(args: argparse.Namespace) -> int:
             flush=True,
         )
     vm = loaded.restore_vm(args.file_policy, relocations)
+    upgrade = getattr(args, "upgrade", None)
+    if upgrade:
+        # Verify before applying, and apply the object that was verified. One
+        # read: verifying a path and then reading it again would apply whatever
+        # the second read returned, and a substituted plan that is internally
+        # self-consistent for this image passes every check apply_plan makes.
+        _report, plan, _new_source, new_ir = load_verified_plan(args.image, upgrade)
+        apply_plan(vm, plan, new_ir)
+        print(
+            "Migration applied: "
+            f"plan format {plan['plan_format_version']}, "
+            f"{plan['active_frames']} active frames remapped, "
+            f"new source SHA-256 {plan['new_source_sha256'][:16]}...; "
+            "the original image is unmodified.",
+            file=sys.stderr,
+            flush=True,
+        )
     source = loaded.manifest["source"]
     print(
         f"Restored from {source['os']} {source['architecture']}.",

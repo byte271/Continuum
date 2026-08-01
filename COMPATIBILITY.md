@@ -74,15 +74,30 @@ Measured on native Linux x86_64, CPython 3.12.13 → 3.13.14, at commit
 | --- | ---: |
 | Accepted and correct | 189 |
 | Explicitly refused | 0 |
-| Unsupported by the language frontend | 15 |
+| Unsupported by the language frontend | 8 |
+| Unsupported live object at checkpoint | 6 |
+| Program runtime failure | 1 |
 | Infrastructure failure | 0 |
 | **Silent mismatch** | **0** |
 | Total | 204 |
 
-Correctness among accepted cases: **100%**. Refused and frontend-unsupported
-cases are reported separately and are not folded into that rate. The 15
-frontend cases are 10 corpus programs the compiler does not accept at all;
-they are a language-coverage gap, not a portability result.
+Correctness among accepted cases: **100%**. Refusals and the three
+out-of-scope classifications are reported separately and are not folded into
+that rate.
+
+The three out-of-scope reasons are counted apart because they say different
+things about the runtime, and reporting all of them as a frontend gap
+overstated the frontend's share:
+
+- 8 cases are 8 corpus programs the compiler does not accept at all
+  (`assignment_chained`, `class_accumulator`, `comparison_chained`,
+  `comprehension_dict`, `comprehension_list`, `comprehension_set`,
+  `fstring_conversion`, `simulation_inventory`). That is a language-coverage
+  gap, not a portability result.
+- 6 cases are `hash_sha256_chunks`, which compiles and runs but holds a live
+  `_hashlib.HASH` at the checkpoint. That is a checkpoint-object limit.
+- 1 case is `iteration_dictionary`, where the program itself raises while
+  checkpointing iteration over `dict_items`. That is a runtime failure.
 
 Live frame depth up to 16 was exercised, across 11 distinct frame chains and
 40 programs.

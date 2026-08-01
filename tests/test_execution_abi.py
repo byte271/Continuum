@@ -346,8 +346,6 @@ class ContractShapeTests(unittest.TestCase):
         self.assertNotIn("9.9.9", document["target"]["python_versions"])
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PlatformDoubleGateTests(unittest.TestCase):
@@ -414,3 +412,7 @@ class PlatformDoubleGateTests(unittest.TestCase):
     def test_windows_arm64_is_absent_from_the_runtime_list(self):
         """The pair the project has always documented as unsupported."""
         self.assertNotIn(("Windows", "arm64"), abi.VERIFIED_PLATFORMS)
+
+
+if __name__ == "__main__":
+    unittest.main()

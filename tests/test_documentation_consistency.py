@@ -151,16 +151,40 @@ class TestCountConsistencyTests(unittest.TestCase):
 
         return count(suite)
 
+    # A completed roadmap milestone records the evidence retained when it
+    # shipped. ROADMAP.md says so in its own header, and that count is
+    # deliberately not the current suite size, so it is not a current-suite
+    # claim and must not be rewritten to match one.
+    HISTORICAL = "**Done.**"
+
+    def current_claims(self, name: str) -> list[str]:
+        claims = []
+        for paragraph in re.split(r"\n\s*\n", read(name)):
+            if self.HISTORICAL in paragraph:
+                continue
+            claims.extend(re.findall(r"\b(\d{2,4}) tests\b", paragraph))
+        return claims
+
     def test_documented_counts_match_discovery(self):
         actual = self.discovered()
         for name in ("README.md", "STATUS.md", "docs/TESTING.md", "ROADMAP.md"):
-            for claimed in re.findall(r"\b(\d{2,4}) tests\b", read(name)):
+            for claimed in self.current_claims(name):
                 with self.subTest(document=name, claimed=claimed):
                     self.assertEqual(
                         int(claimed),
                         actual,
                         f"{name} claims {claimed} tests; discovery finds {actual}",
                     )
+
+    def test_the_current_count_is_still_published(self):
+        """A count must not be able to disappear rather than be corrected."""
+
+        for name in ("README.md", "STATUS.md", "docs/TESTING.md"):
+            with self.subTest(document=name):
+                self.assertTrue(
+                    self.current_claims(name),
+                    f"{name} no longer states a current suite size",
+                )
 
 
 class LanguageMatrixAccuracyTests(unittest.TestCase):

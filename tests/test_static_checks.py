@@ -114,5 +114,68 @@ class ScriptImportTests(unittest.TestCase):
                     self.fail(f"{name} does not compile: {exc}")
 
 
+class TestModuleLayoutTests(unittest.TestCase):
+    """A `unittest.main()` guard must be the last thing in a test module.
+
+    `unittest discover` imports a module, so a guard placed above later
+    `TestCase` classes still collects them and CI stays green. Running the file
+    directly executes the guard first and the process exits before those
+    classes exist -- reporting success for tests that never ran. Three
+    regression tests for the stale-identifier fix sat below such a guard.
+    """
+
+    def test_the_main_guard_is_last_in_every_test_module(self):
+        import ast
+
+        findings = []
+        def is_main_guard(node) -> bool:
+            """`if __name__ == "__main__":`, matched structurally.
+
+            Searching the dumped tree for the string would also match an
+            unrelated condition such as `if runner == "__main__":`. One of
+            those appearing below the real guard would move the reference
+            line past the classes this check exists to find.
+            """
+
+            if not isinstance(node, ast.If):
+                return False
+            test = node.test
+            if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+                return False
+            if not isinstance(test.ops[0], ast.Eq):
+                return False
+            left, right = test.left, test.comparators[0]
+            if isinstance(right, ast.Name) and isinstance(left, ast.Constant):
+                left, right = right, left
+            return (
+                isinstance(left, ast.Name)
+                and left.id == "__name__"
+                and isinstance(right, ast.Constant)
+                and right.value == "__main__"
+            )
+
+        for path in sorted((ROOT / "tests").glob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            guards = [node.lineno for node in tree.body if is_main_guard(node)]
+            if not guards:
+                continue
+            later = [
+                node.name
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.lineno > guards[-1]
+            ]
+            if later:
+                findings.append(
+                    f"{path.name}: {', '.join(later)} defined after the "
+                    f"__main__ guard on line {guards[-1]}"
+                )
+        self.assertEqual(
+            findings,
+            [],
+            "test classes below a __main__ guard never run on a direct "
+            "invocation:\n" + "\n".join(findings),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
