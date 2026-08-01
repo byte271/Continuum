@@ -22,8 +22,9 @@ has no Windows job.
   native Linux x86_64 under CPython 3.12.13 was migrated onto revision B and
   resumed on a native Apple Silicon macOS arm64 runner under CPython 3.13.14.
   Actions run
-  [30668706966](https://github.com/byte271/Continuum/actions/runs/30668706966)
-  at commit `03da288`. Four active frames and twenty bindings mapped totally,
+  [30682958879](https://github.com/byte271/Continuum/actions/runs/30682958879),
+  evaluated on merge commit `d328397`. Four active frames and twenty bindings
+  mapped totally,
   the original image byte-identical throughout, 30 action nonces each executed
   exactly once, zero repeated, the old revision's future behavior absent and
   the new revision's present, judged against an independently stated oracle

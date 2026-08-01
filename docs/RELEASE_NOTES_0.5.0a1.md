@@ -11,15 +11,15 @@ modified version of the same program — with live execution state carried acros
 the edit. Verified simultaneously across operating system, architecture, Python
 version, and source revision.
 
-[Actions run 30668706966](https://github.com/byte271/Continuum/actions/runs/30668706966)
-at commit `03da288`:
+[Actions run 30682958879](https://github.com/byte271/Continuum/actions/runs/30682958879),
+evaluated on merge commit `d328397`:
 
 | Property | Result |
 | --- | --- |
 | Source | revision A, Linux x86_64, CPython 3.12.13 |
 | Target | revision B, macOS arm64, CPython 3.13.14 (native) |
 | Source exited and reaped before target read the image | yes |
-| Image SHA-256 capture / arrival / after migration | `fb847f3b…4d80`, identical |
+| Image SHA-256 capture / arrival / after migration | `10597941…db4c`, identical |
 | Active frames mapped | 4, total mapping |
 | Active bindings mapped | 20 |
 | Action nonces | 30, each exactly once |
