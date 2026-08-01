@@ -51,7 +51,7 @@ Each active frame contains:
 | `pc` | Index of the next logical instruction |
 | `locals` | Function-local object graph roots |
 | `stack` | Language operand/value stack |
-| `blocks` | Active `try/finally` handlers |
+| `blocks` | Active `try/finally` and `try/except` handlers |
 | `finally_reasons` | Normal or exceptional pending control state |
 
 The VM also owns module globals, program arguments, instruction counters,

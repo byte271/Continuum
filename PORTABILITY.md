@@ -15,7 +15,7 @@ source, or opaque bundled file bytes. Portable state uses:
 - explicit source OS, architecture, Python, runtime, IR, and capability
   metadata.
 
-Current IR 0.3 stores no Python `id()` values, machine pointers, native stack bytes,
+Current IR 0.4 stores no Python `id()` values, machine pointers, native stack bytes,
 executable pages, endianness-dependent structs, or host-sized packed
 integers. Runtime instruction caches are reconstructed from IR and are not
 serialized.
