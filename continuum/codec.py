@@ -7,6 +7,10 @@ import math
 import random
 from typing import Any
 
+# The graph codec version is declared once, in `abi`, because the execution
+# contract advertises it as a capability. Restating it here let the bytes this
+# module writes disagree with the capability the runtime claims.
+from .abi import GRAPH_CODEC_VERSION
 from .errors import ImageError, UnsupportedObjectError
 from .resources import PortableFile
 from .values import (
@@ -35,7 +39,11 @@ class GraphEncoder:
 
     def encode(self, root: Any) -> dict[str, Any]:
         encoded_root = self._value(root)
-        return {"codec_version": "0.1", "root": encoded_root, "objects": self.nodes}
+        return {
+            "codec_version": GRAPH_CODEC_VERSION,
+            "root": encoded_root,
+            "objects": self.nodes,
+        }
 
     def _reference(self, value: Any, kind: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
         identity = id(value)
@@ -222,7 +230,10 @@ class GraphDecoder:
         resources: dict[str, PortableFile] | None = None,
         max_objects: int = 2_000_000,
     ):
-        if not isinstance(document, dict) or document.get("codec_version") != "0.1":
+        if (
+            not isinstance(document, dict)
+            or document.get("codec_version") != GRAPH_CODEC_VERSION
+        ):
             raise ImageError("unsupported heap codec version")
         self.nodes = document.get("objects")
         if not isinstance(self.nodes, list) or len(self.nodes) > max_objects:

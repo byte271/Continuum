@@ -45,6 +45,31 @@ from .values import ClassValue, InstanceValue
 PLAN_FORMAT_VERSION = "1.0"
 PLAN_ENTRIES = ("plan.json", "new_source.py", "new_ir.json", "checksums.json")
 
+# Every field `plan.json` must carry. Checked when the plan is read, so a
+# caller that only reads -- `inspect-upgrade` prints fifteen of these -- gets a
+# refusal naming the missing field rather than a KeyError traceback from deep
+# inside the printer. Verification re-derives the whole document and would
+# catch the same absence, but reading is a public entry point on its own.
+PLAN_FIELDS = (
+    "plan_format_version",
+    "semantic_model_version",
+    "execution_abi_version",
+    "original_image_sha256",
+    "old_source_sha256",
+    "old_ir_sha256",
+    "new_source_sha256",
+    "new_ir_sha256",
+    "entry_program",
+    "active_frames",
+    "frame_mappings",
+    "binding_mappings",
+    "control_region_mappings",
+    "class_mappings",
+    "accepted_edit_classes",
+    "assumptions",
+    "mapping_is_total",
+)
+
 # Refusal reason codes. Every one names a specific unmappable element.
 REFUSE_ACTIVE_FUNCTION_MISSING = "active-function-missing"
 REFUSE_ACTIVE_FUNCTION_AMBIGUOUS = "active-function-ambiguous"
@@ -805,6 +830,13 @@ def read_plan(path: str | os.PathLike[str]) -> tuple[dict[str, Any], str, dict[s
         )
 
     plan = _plan_json(raw["plan.json"], "plan.json")
+    missing = [field for field in PLAN_FIELDS if field not in plan]
+    if missing:
+        raise MigrationRefused(
+            REFUSE_MALFORMED_PLAN,
+            "plan.json",
+            f"plan omits required fields: {missing}",
+        )
     if plan.get("plan_format_version") != PLAN_FORMAT_VERSION:
         raise MigrationRefused(
             REFUSE_UNKNOWN_PLAN_VERSION,

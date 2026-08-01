@@ -310,6 +310,65 @@ class LegacyContractTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason, abi.REASON_LEGACY_RUNTIME_MISMATCH)
         self.assertIn(abi.CONTAINER_FORMAT_VERSION, str(caught.exception))
 
+    def test_legacy_image_cannot_reach_a_platform_the_runtime_refuses(self):
+        """The older format is a reason to be stricter, never a way around the
+        runtime side of the platform decision.
+
+        The 0.2 path refuses Windows arm64 on this runtime's own evidence, not
+        on anything the image declares. A 0.1 image carries no contract to
+        argue with, so if the container format were the only difference an
+        image could reach an unverified pair simply by being older -- with
+        every archive checksum recomputed to match.
+        """
+
+        pair = ("Windows", "arm64")
+        self.assertNotIn(pair, abi.VERIFIED_PLATFORMS)
+        with self.assertRaises(IncompatibleImage) as caught:
+            abi.legacy_decision(
+                self.legacy(), Host("3.12.13", *pair, continuum_version="0.3.1")
+            )
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+
+    def test_the_legacy_platform_gate_runs_before_the_exact_checks(self):
+        """An unverified pair is refused as such, not as a version mismatch.
+
+        Reporting "wrong Python" on a host that would be refused whatever its
+        Python is sends the reader off to re-freeze an image that can never
+        restore there.
+        """
+
+        with self.assertRaises(IncompatibleImage) as caught:
+            abi.legacy_decision(
+                self.legacy(),
+                Host("3.13.14", "Windows", "arm64", continuum_version="9.9.9"),
+            )
+        self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+
+
+class GraphCodecVersionTests(unittest.TestCase):
+    """One version, declared once: the bytes the codec writes and the
+    capability the execution contract advertises cannot drift apart."""
+
+    def test_the_encoder_stamps_the_abi_constant(self):
+        from continuum.codec import GraphEncoder
+
+        self.assertEqual(
+            GraphEncoder().encode(1)["codec_version"], abi.GRAPH_CODEC_VERSION
+        )
+
+    def test_the_decoder_accepts_exactly_the_abi_constant(self):
+        from continuum.codec import GraphDecoder
+        from continuum.errors import ImageError
+
+        with self.assertRaises(ImageError):
+            GraphDecoder(
+                {
+                    "codec_version": abi.GRAPH_CODEC_VERSION + "-not-this",
+                    "root": None,
+                    "objects": [],
+                }
+            )
+
 
 class ContractShapeTests(unittest.TestCase):
     def test_mandatory_capabilities_are_all_provided_by_this_runtime(self):

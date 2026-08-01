@@ -520,7 +520,21 @@ def legacy_decision(
     ABI-compatible, this keeps the original strict rule and reports refusals
     with the format version named, so the message explains *why* the stricter
     rule applied.
+
+    The runtime's own platform allowlist is applied first, before either exact
+    check. The runtime side of the platform decision does not depend on what an
+    image declares, so it cannot depend on the container format either: an
+    older format is a reason to be stricter, never a way to reach a pair this
+    runtime has not verified.
     """
+
+    if (host.operating_system, host.architecture) not in host.verified_platforms:
+        raise IncompatibleImage(
+            REASON_UNSUPPORTED_PLATFORM,
+            f"this runtime does not accept platform {host.operating_system} "
+            f"{host.architecture}; accepted pairs are "
+            f"{[f'{name} {machine}' for name, machine in host.verified_platforms]}",
+        )
 
     image_python = compatibility.get("python_version")
     if image_python != host.python_version:
@@ -571,6 +585,9 @@ __all__ = [
     "MANDATORY_CAPABILITIES",
     "PROVIDED_CAPABILITIES",
     "SUPPORTED_PYTHON",
+    "TARGET_ARCHITECTURES",
+    "TARGET_OPERATING_SYSTEMS",
+    "TARGET_PLATFORMS",
     "VERIFIED_PLATFORMS",
     "VERIFIED_PYTHON_VERSIONS",
     "build_contract",

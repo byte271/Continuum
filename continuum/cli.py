@@ -20,6 +20,9 @@ from .abi import (
     GRAPH_CODEC_VERSION,
     LEGACY_CONTAINER_FORMAT_VERSION,
     POLICY_EXECUTION_ABI,
+    TARGET_ARCHITECTURES,
+    TARGET_OPERATING_SYSTEMS,
+    VERIFIED_PLATFORMS,
     VERIFIED_PYTHON_VERSIONS,
     normalized_architecture,
 )
@@ -293,11 +296,7 @@ def _sessions() -> int:
 def _doctor(args: argparse.Namespace) -> int:
     current_python = platform.python_version()
     current_system = platform.system()
-    current_machine = {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "aarch64": "arm64",
-    }.get(platform.machine().lower(), platform.machine().lower())
+    current_machine = normalized_architecture()
     manifest_path = os.environ.get("CONTINUUM_BUNDLE_MANIFEST")
     bundle_manifest = None
     problems = []
@@ -307,10 +306,20 @@ def _doctor(args: argparse.Namespace) -> int:
             f"Python {current_python} is not verified by this runtime; verified "
             f"CPython versions are {list(VERIFIED_PYTHON_VERSIONS)}"
         )
-    if current_system not in {"Linux", "Darwin", "Windows"}:
+    if current_system not in TARGET_OPERATING_SYSTEMS:
         problems.append(f"unsupported operating system: {current_system}")
-    if current_machine not in {"x86_64", "arm64"}:
+    if current_machine not in TARGET_ARCHITECTURES:
         problems.append(f"unsupported architecture: {current_machine}")
+    # The axis checks above accept the whole 3x2 product. Membership in both
+    # axes is not membership in the pair set: Windows arm64 satisfies each axis
+    # and is still refused at restore. `doctor` answers "will this host work?",
+    # so it has to ask the same question the runtime does.
+    if (current_system, current_machine) not in VERIFIED_PLATFORMS:
+        problems.append(
+            f"this runtime does not accept platform {current_system} "
+            f"{current_machine}; accepted pairs are "
+            f"{[f'{name} {machine}' for name, machine in VERIFIED_PLATFORMS]}"
+        )
 
     if manifest_path:
         path = Path(manifest_path)
