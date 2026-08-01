@@ -74,7 +74,7 @@ has no Windows job.
   process resumed the unchanged image. Source/transfer/target image hashes
   were identical; source-plus-target output and the final result hash matched
   the uninterrupted control.
-- CPython 3.12.13 source-subset compilation into current Continuum IR 0.3.
+- CPython 3.12.13 source-subset compilation into current Continuum IR 0.4.
 - Explicit frames, next logical PCs, locals, operand stacks, module globals,
   and supported `try/finally` control state.
 - Positional default arguments with definition-time evaluation, mutable
@@ -105,25 +105,31 @@ has no Windows job.
   The protocol and the resulting image are unchanged; idle cost and freeze
   latency are not measured on Windows.
 - Public `run`, `sessions`, `freeze`, `inspect`, `verify`, `resume`, `doctor`,
-  `demo`, and `--version`.
+  `demo`, `plan-upgrade`, `inspect-upgrade`, `verify-upgrade`, and `--version`.
 - `verify` validates compatibility, decodes the allowlisted graph, and
   reconstructs frames without opening resources or starting execution.
-- A 50-program unchanged-source differential corpus. Current IR 0.3 passes
-  all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
-  arguments. That rate is a Linux x86_64 measurement; the suite exercises two
-  corpus programs through all four gates on every host.
-- Current full suite: 408 tests discovered. Tests skip only where the host
+- A 50-program unchanged-source differential corpus. Current IR 0.4 passes
+  all four gates for 40 programs (80.0%), up from 35 (70.0%) at IR 0.3 and 32
+  (64.0%) at IR 0.2. That IR 0.4 rate is a Windows x86_64 measurement and the
+  two earlier rates are Linux x86_64; the suite exercises two corpus programs
+  through all four gates on every host. `COMPATIBILITY.md` holds the per-gate
+  breakdown.
+- Current full suite: 413 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.
 
-## IN PROGRESS
+## IR 0.4 LANGUAGE SUBSET — COMPLETE
 
-- Continuum IR 0.4, released as runtime 0.3.0. Milestone 1,
-  portable `try/except`, is complete: handler matching, tuple matching, `as`
-  binding with handler-exit unbinding, `else`, and `try/except/finally`, with
-  the live exception carried as an ordinary portable operand so a checkpoint
-  inside a handler serializes it like any other value. Milestone 2,
+All four milestones below have shipped. This section records what each one
+covers and what it deliberately leaves out; it is not outstanding work.
+
+- Continuum IR 0.4, first released as runtime 0.3.0 and current in 0.5.0a1.
+  Milestone 1, portable `try/except`, is complete: handler matching, tuple
+  matching, `as` binding with handler-exit unbinding, `else`, and
+  `try/except/finally`, with the live exception carried as an ordinary
+  portable operand so a checkpoint inside a handler serializes it like any
+  other value. Milestone 2,
   complete argument binding, is complete: positional-only and keyword-only
   boundaries, `*args`, `**kwargs`, keyword-only defaults, and `*`/`**` call
   unpacking, with CPython's binding error messages reproduced exactly.
@@ -143,15 +149,24 @@ has no Windows job.
   at commit `023f74c`. The migrated image carried a VM-owned class and
   instance, a live `try/except`, a variadic method binding, and a closure
   cell shared by two functions, all folded into the final digest.
-- IR 0.4 supersedes the v0.2.0 release. An image written by either runtime
-  is rejected by the other: the capability negotiation requires an exact
-  `continuum-ir-<version>` match, so v0.2.0 images cannot be resumed by
-  v0.3.0 and vice versa.
-- IR 0.4 images are not interchangeable with IR 0.3 images: the runtime
-  negotiates an exact `continuum-ir-<version>` capability, so v0.2.0 images
-  are rejected by this revision and vice versa.
-- No cross-platform proof has been run for IR 0.4. The single combined
-  Linux x86_64 to macOS arm64 proof is planned after milestone 4.
+- IR 0.4 images are not interchangeable with IR 0.3 images. Capability
+  negotiation requires an exact `continuum-ir-<version>` match, so an image
+  written by the v0.2.0 runtime cannot be resumed by this one, and an image
+  written by this runtime cannot be resumed by v0.2.0.
+
+## OUTSTANDING
+
+Named because they are not done, not because anyone is currently working on
+them. `ROADMAP.md` is the authority for sequencing.
+
+- A Windows leg for the cross-platform proof, roadmap milestone 4. Until it
+  lands, no cross-platform claim involving Windows may appear in this
+  repository.
+- Network installation of the Linux x86_64 and macOS arm64 bundles from their
+  published release URLs. Only the Windows path has been exercised over the
+  network; the other two are exercised in CI against a local archive.
+- Regenerating the 50-program corpus on macOS arm64, so the published
+  compatibility rate stops depending on a single host per revision.
 
 ## PARTIALLY WORKING
 
@@ -167,8 +182,10 @@ has no Windows job.
   ignored for compatibility.
 - Failure injection covers request publication, unsupported-state preflight,
   retry, corruption, truncation, and compatibility—not every commit stage.
-- Performance remains about 159× slower than the native control without
-  safe-point notification on the audited workload.
+- Performance remains large: 144× slower than CPython under 3.12.13 and 206×
+  under 3.13.14, on the current migration workload. The 159× figure this line
+  used to quote is a 0.1.1.dev0/IR 0.2 historical measurement that
+  `PERFORMANCE.md` explicitly says must not be quoted for the current release.
 - Self-contained runtime bundles have builders and transactional installers
   for all three hosts: `.tar.gz` through `build_bundle.sh`/`install.sh` on
   POSIX, `.zip` through `build_bundle_windows.ps1`/`install.ps1` on Windows.
@@ -182,14 +199,18 @@ has no Windows job.
 
 - Arbitrary CPython frames, arbitrary PIDs, native instruction boundaries, or
   arbitrary Python programs.
-- Closures, classes/instances, generators, context managers, comprehensions,
-  `try/except`, positional-only/keyword-only/variadic parameters, and other
-  rejected syntax.
+- Generators and `yield`, context managers and `with`, comprehensions and
+  generator expressions, lambdas, decorators, `global`, chained comparison,
+  chained assignment, inheritance and metaclasses, and the other syntax
+  `LANGUAGE_SUPPORT.md` marks explicitly rejected. That matrix is the
+  authority for this list and is itself checked against the compiler.
 - Native extensions with live state, NumPy/PyTorch execution, GPU memory,
   threads, subprocesses, sockets, locks, devices, and writable files.
 - Image signatures, authentication policy, encryption, secret redaction, or a
   security sandbox.
-- Python versions other than 3.12.13.
+- Python versions other than the verified allowlist, CPython 3.12.13 and
+  3.13.14. An interpreter merely *between* those two is refused, not
+  interpolated.
 
 ## UNVERIFIED
 
@@ -205,7 +226,9 @@ has no Windows job.
 - Native macOS and Windows resource behavior and directory durability.
 - Windows idle safe-point and freeze-latency cost. `PERFORMANCE.md` contains
   Linux x86_64 measurements only.
-- The 50-program corpus on Windows or macOS.
+- The 50-program corpus on macOS arm64. It has been run on Windows x86_64:
+  the IR 0.4 column in `COMPATIBILITY.md` is that run, and it is the only
+  corpus measurement so far taken on a host other than Linux x86_64.
 - Cross-platform restoration for programs or resources outside the exact
   verified controlled subset.
 - Installing the Linux x86_64 and macOS arm64 archives from their published

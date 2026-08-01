@@ -76,8 +76,9 @@ none is claimed. Running natively on a platform is not evidence that an image
 moves to or from it — see [PORTABILITY.md](PORTABILITY.md) for the tested pairs
 and [ROADMAP.md](ROADMAP.md) for the Windows proof leg that would change this.
 
-The published 50-program compatibility corpus report is a Linux x86_64
-measurement and has not been regenerated on Windows or macOS.
+The published 50-program compatibility corpus has been measured on Linux
+x86_64 and, for the current IR 0.4 revision, on Windows x86_64. It has not been
+regenerated on macOS arm64.
 
 ## Verified cross-platform proof
 
@@ -100,8 +101,10 @@ repeated completed action. See [PORTABILITY.md](PORTABILITY.md) and the
 
 The verified scope remains narrow: CPython 3.12.13 and 3.13.14 exactly, one
 thread, a controlled language subset, Continuum safe points, and read-only
-regular files. Classes, closures, generators, native extensions, subprocesses,
-sockets, writable files, and arbitrary CPython frames are unsupported.
+regular files. Generators, context managers, comprehensions, inheritance,
+native extensions, subprocesses, sockets, writable files, and arbitrary CPython
+frames are unsupported. Classes, closures, `try/except`, and variadic
+parameters became supported in IR 0.4; `LANGUAGE_SUPPORT.md` is the authority.
 
 ### It has also crossed Python versions
 
@@ -270,13 +273,40 @@ Relocation still verifies size and SHA-256. It never silently accepts a
 different file. `OLD` must be an absolute POSIX or Windows path exactly as the
 source host recorded it; `NEW` is resolved on the current host.
 
+## Migrating a frozen program onto new source
+
+A frozen image can be moved onto an edited revision of its own program, so a
+long-running continuation does not have to be restarted to pick up a source
+change:
+
+```bash
+python3 -m continuum plan-upgrade process.cont new_program.py -o migration.cup
+python3 -m continuum inspect-upgrade migration.cup
+python3 -m continuum verify-upgrade process.cont migration.cup
+python3 -m continuum resume process.cont --upgrade migration.cup
+```
+
+`plan-upgrade` produces a **total** mapping or refuses outright, naming the
+exact element it could not map. It is never partial. `inspect-upgrade` prints a
+plan without applying it. `verify-upgrade` does not trust the plan: it
+independently re-derives the whole mapping from the image and the plan's own new
+source, and refuses on any difference. Those first three commands do not execute
+the program; `resume --upgrade` does, which is the point of it. None of the four
+writes to the original `.cont`.
+
+The accepted edit classes, the refusal codes, and what is deliberately out of
+scope are in `docs/RELEASE_NOTES_0.5.0a1.md`. This path is verified across both
+hosts and both interpreters: an image frozen on Linux x86_64 under CPython
+3.12.13 was migrated onto a new revision and resumed on macOS arm64 under
+CPython 3.13.14.
+
 ## Tests
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 408 tests and is run natively on Linux x86_64, Apple
+The suite discovers 413 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

@@ -9,6 +9,7 @@ failure rather than a review comment.
 
 from __future__ import annotations
 
+import argparse
 import platform
 import re
 import unittest
@@ -16,7 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from continuum import FORMAT_VERSION, IR_VERSION, SUPPORTED_PYTHON, __version__, abi
-from continuum.cli import _require_runtime_version
+from continuum.cli import _parser, _require_runtime_version
 from continuum.compiler import compile_source
 from continuum.errors import CompileError, ContinuumError
 
@@ -293,6 +294,199 @@ class PlatformClaimTests(unittest.TestCase):
         # The guard above is only meaningful while this remains true.
         workflow = read(".github/workflows/cross-platform-proof.yml")
         self.assertNotIn("windows", workflow.lower())
+
+
+class SupersededRevisionTests(unittest.TestCase):
+    """A superseded IR revision must not be described as the current one.
+
+    Every check below caught a real line. `STATUS.md` announced IR 0.4 in its
+    header and then called IR 0.3 current three sections later; `PORTABILITY.md`
+    said "Current IR 0.3" nine lines above "current IR 0.4". Naming a revision
+    historically is fine and common here -- the failure mode is the word
+    *current* attached to a revision that is not.
+    """
+
+    def documents(self) -> list[str]:
+        """Every markdown file in the tree, discovered rather than listed.
+
+        A hand-maintained inventory is the wrong shape for this check: a new
+        document, or one left off the list, is exactly where a stale claim
+        survives unnoticed. Discovery means adding a file cannot silently opt
+        it out.
+        """
+
+        found = sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").glob("*.md"))
+        return [path.relative_to(ROOT).as_posix() for path in found]
+
+    # Both orderings, because the claim reads naturally either way:
+    # "Current IR 0.3" / "Current development uses IR 0.3", and
+    # "IR 0.3 is current". Bounded so neither can reach across a sentence
+    # boundary into an unrelated historical clause.
+    CURRENT_IR = (
+        re.compile(r"[Cc]urrent[^.\n]{0,40}?\bIR (\d+\.\d+)"),
+        re.compile(r"\bIR (\d+\.\d+)\b[^.\n]{0,40}?\b(?:is|remains|stays)\s+current"),
+    )
+
+    def test_every_markdown_file_is_covered(self):
+        """The guard is only as good as its reach."""
+
+        documents = self.documents()
+        self.assertGreaterEqual(len(documents), 16, documents)
+        for required in ("README.md", "STATUS.md", "docs/TESTING.md"):
+            self.assertIn(required, documents)
+
+    def test_no_document_calls_a_superseded_ir_revision_current(self):
+        for name in self.documents():
+            text = read(name)
+            claims = [c for pattern in self.CURRENT_IR for c in pattern.findall(text)]
+            for claimed in claims:
+                with self.subTest(document=name, claimed=claimed):
+                    self.assertEqual(
+                        claimed,
+                        IR_VERSION,
+                        f"{name} describes IR {claimed} as current; "
+                        f"the shipping revision is IR {IR_VERSION}",
+                    )
+
+
+class PublicCommandInventoryTests(unittest.TestCase):
+    """STATUS.md's command inventory must match the parser it describes.
+
+    The inventory silently omitted `plan-upgrade`, `inspect-upgrade`, and
+    `verify-upgrade` -- the three commands the release was named for. A reader
+    checking what is public got an answer that was a release out of date.
+    """
+
+    def public_commands(self) -> set[str]:
+        parser = _parser()
+        actions = [
+            action
+            for action in parser._actions  # noqa: SLF001 - argparse has no public API
+            if isinstance(action, argparse._SubParsersAction)  # noqa: SLF001
+        ]
+        self.assertEqual(len(actions), 1, "expected exactly one subparser group")
+        return set(actions[0].choices)
+
+    def test_status_lists_every_public_command(self):
+        status = read("STATUS.md")
+        bullet = next(
+            (
+                line
+                for line in status.splitlines()
+                if line.startswith("- Public `")
+            ),
+            None,
+        )
+        self.assertIsNotNone(bullet, "STATUS.md has no public-command inventory")
+        index = status.index(bullet)
+        # The inventory wraps across lines; take it to the next bullet.
+        rest = status[index:]
+        end = rest.index("\n- ", 1)
+        listed = set(re.findall(r"`([a-z-]+)`", rest[:end]))
+        missing = self.public_commands() - listed
+        self.assertEqual(
+            missing,
+            set(),
+            f"STATUS.md does not list public command(s): {sorted(missing)}",
+        )
+        unreal = listed - self.public_commands() - {"--version"}
+        self.assertEqual(
+            unreal,
+            set(),
+            f"STATUS.md lists command(s) the parser does not define: "
+            f"{sorted(unreal)}",
+        )
+
+
+class NotWorkingAccuracyTests(unittest.TestCase):
+    """The NOT WORKING list must not name syntax the compiler accepts.
+
+    IR 0.4 shipped closures, classes, `try/except`, and variadic parameters,
+    and the same document went on listing all four as not working. A reader
+    deciding whether Continuum can run their program was told no when the
+    answer was yes.
+    """
+
+    # (label as it appears in the list, source that must compile)
+    SUPPORTED = (
+        ("closures", "def o():\n    v = 1\n    def i():\n        nonlocal v\n        v = 2\n    return i\n"),
+        ("classes/instances", "class C:\n    def __init__(self):\n        self.x = 1\n\nc = C()\n"),
+        ("try/except", "try:\n    x = 1\nexcept ValueError:\n    x = 2\n"),
+        ("variadic parameters", "def f(*a, **k):\n    return a\n"),
+        ("keyword-only parameters", "def f(a, *, b=1):\n    return b\n"),
+        ("positional-only parameters", "def f(a, /, b):\n    return a\n"),
+        ("nonlocal", "def o():\n    v = 1\n    def i():\n        nonlocal v\n        v = 2\n    return i\n"),
+    )
+
+    def section(self, heading: str) -> str:
+        status = read("STATUS.md")
+        start = status.index(f"## {heading}")
+        rest = status[start + len(heading) :]
+        end = rest.find("\n## ")
+        return rest if end == -1 else rest[:end]
+
+    def not_supported_list(self) -> str:
+        """The bullet list under LIMITATIONS.md's `Not supported:` heading.
+
+        Checked separately from STATUS.md because both documents kept their own
+        copy of the same list, and only one of them was corrected the first
+        time. A guard over one file would have let the other keep drifting.
+        """
+
+        text = read("LIMITATIONS.md")
+        rest = text[text.index("Not supported:") :]
+        lines = rest.splitlines()[1:]
+        collected = []
+        for line in lines:
+            if line.strip() and not line.startswith(("-", " ")):
+                break
+            collected.append(line)
+        return "\n".join(collected)
+
+    def compiles(self, source: str) -> bool:
+        try:
+            compile_source(source, "<not-working>")
+        except CompileError:
+            return False
+        return True
+
+    def test_not_working_does_not_name_supported_constructs(self):
+        for document, section in (
+            ("STATUS.md", self.section("NOT WORKING")),
+            ("LIMITATIONS.md", self.not_supported_list()),
+        ):
+            for label, source in self.SUPPORTED:
+                with self.subTest(document=document, construct=label):
+                    self.assertTrue(
+                        self.compiles(source),
+                        f"{label} no longer compiles; the case needs updating",
+                    )
+                    self.assertNotIn(
+                        label,
+                        section,
+                        f"{document} lists {label!r} as unsupported, but the "
+                        "compiler accepts it",
+                    )
+
+    def test_not_working_python_version_claim_matches_the_allowlist(self):
+        """Set equality, not containment, in both directions.
+
+        Containment alone passes a section that names every verified version
+        *and* an unverified one -- which is the more dangerous error of the
+        two, since it advertises support that does not exist. The failure this
+        replaced was an omission, but the check has to catch both.
+        """
+
+        section = self.section("NOT WORKING")
+        documented = set(re.findall(r"\b3\.\d+\.\d+\b", section))
+        self.assertEqual(
+            documented,
+            set(abi.VERIFIED_PYTHON_VERSIONS),
+            "STATUS.md's NOT WORKING version entry disagrees with "
+            f"abi.VERIFIED_PYTHON_VERSIONS; missing "
+            f"{sorted(set(abi.VERIFIED_PYTHON_VERSIONS) - documented)}, "
+            f"unexpected {sorted(documented - set(abi.VERIFIED_PYTHON_VERSIONS))}",
+        )
 
 
 if __name__ == "__main__":

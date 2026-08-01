@@ -5,24 +5,30 @@
 The current runtime accepts a useful but small subset:
 
 - function definitions with required and defaulted positional parameters;
+- complete argument binding: positional-only and keyword-only boundaries,
+  `*args`, `**kwargs`, keyword-only defaults, and `*`/`**` call unpacking;
 - assignments, arithmetic, comparisons, Boolean expressions;
 - `if`, `while`, portable `for` iteration, and loop `else`;
 - function calls and nested active Continuum frames;
+- identity-preserving lexical closures, `nonlocal`, and multi-level capture;
+- VM-owned classes and instances: methods, `__init__`, class and instance
+  attributes, and attribute assignment, without inheritance;
 - lists, dictionaries, sets, tuples, slicing, and subscripting;
 - module globals;
-- `try/finally` without control transfer out of the `try`;
+- `try/finally` without control transfer out of the `try`, and portable
+  `try/except` including tuple matching, `as` binding, and `else`;
 - a closed builtin, method, and stdlib-module allowlist.
 
 Not supported:
 
-- classes and arbitrary instances;
-- closures, `nonlocal`, and `global`;
-- decorators, positional-only parameters, keyword-only parameters, and
-  variadic parameters;
+- inheritance, base classes, metaclasses, class decorators, descriptors, and
+  user-defined exception classes;
+- `global`;
+- decorators;
 - generators, coroutines, async code, and context managers;
-- comprehensions and chained comparisons;
-- `try/except`, `with`, `yield`, pattern matching, and every Python syntax form
-  not explicitly compiled;
+- comprehensions, generator expressions, lambdas, and chained comparisons;
+- chained assignment, `with`, `yield`, pattern matching, and every Python
+  syntax form not explicitly compiled;
 - monkey patching and dynamic code generation;
 - arbitrary imports.
 
@@ -84,10 +90,11 @@ cross-platform path involving Windows has been run in either direction, and
 no cross-host test has exercised a text-mode resource between hosts whose
 native line endings differ. Windows arm64 is unsupported and images reject it.
 
-The published 50-program compatibility corpus report was measured on Linux
-x86_64 only. The test suite exercises two corpus programs through all four
-gates on every host, so the full corpus rate is not a Windows or macOS
-measurement.
+The published 50-program compatibility corpus has been measured on Linux
+x86_64 and, for the current IR 0.4 revision, on Windows x86_64. It has not been
+measured on macOS arm64. The test suite exercises two corpus programs through
+all four gates on every host, which is a smoke check of the runner rather than
+a compatibility measurement for that host.
 
 See [STATUS.md](STATUS.md) and [PORTABILITY.md](PORTABILITY.md).
 

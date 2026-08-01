@@ -70,7 +70,7 @@ between releases; wiring them into CI is not done.
 ## Historical measurements (0.1.1.dev0, IR 0.2)
 
 > The section below predates the current runtime by two IR revisions and is
-> retained as history. Do not quote it for 0.4.0a1.
+> retained as history. Do not quote it for 0.5.0a1.
 
 Correctness remains the priority. These are raw local measurements from one
 Linux x86_64 environment, not portable targets.
@@ -185,7 +185,8 @@ optimization made was therefore to:
   execution.
 
 The optimization described in this historical profile introduced IR 0.2.
-Current development uses IR 0.3 for positional default-argument state. Runtime
+Positional default-argument state arrived in IR 0.3; the current revision is
+IR 0.4. Runtime
 instruction caches remain unpersisted and are recreated after restore.
 
 Post-optimization profile:

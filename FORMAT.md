@@ -52,7 +52,8 @@ targets are integer instruction indices. `function_id` values are portable
 identifiers, never addresses. The loader validates every opcode and jump
 target before constructing a VM.
 
-IR 0.3 function definitions include a validated `default_count`.
+Function definitions include a validated `default_count`, added in IR 0.3 and
+carried unchanged by the shipping IR 0.4.
 `MAKE_FUNCTION` captures that many definition-time values from the operand
 stack. Function heap records contain the resulting defaults tuple, preserving
 mutable-default identity across calls and restoration.
