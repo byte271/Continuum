@@ -47,8 +47,9 @@ has no Windows job.
   requirement. Format 0.1 images keep their original exact-version rule.
 - Cross-Python differential corpus: 204 cases over 50 programs, CPython
   3.12.13 → 3.13.14, 189 accepted and correct, **0 silent mismatches**, 0
-  infrastructure failures, live frame depth to 16. 15 cases are language
-  frontend gaps, reported separately.
+  infrastructure failures, live frame depth to 16. The remaining 15 are
+  reported separately and split by reason: 8 language frontend gaps, 6 an
+  unsupported live object at the checkpoint, 1 a program runtime failure.
 - Verified cross-platform continuation from a native x86_64 Linux
   GitHub-hosted VM to a native Apple Silicon macOS arm64 GitHub-hosted runner.
   Actions run
