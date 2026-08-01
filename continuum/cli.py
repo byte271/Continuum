@@ -14,6 +14,15 @@ from pathlib import Path
 from typing import Any
 
 from . import IR_VERSION, SUPPORTED_PYTHON, __version__
+from .abi import (
+    CONTAINER_FORMAT_VERSION,
+    EXECUTION_ABI_VERSION,
+    GRAPH_CODEC_VERSION,
+    LEGACY_CONTAINER_FORMAT_VERSION,
+    POLICY_EXECUTION_ABI,
+    VERIFIED_PYTHON_VERSIONS,
+    normalized_architecture,
+)
 from ._harness import (
     DEFAULT_HOLD_SAFE_POINT,
     HOLD_SAFE_POINT_ENV,
@@ -173,10 +182,23 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _require_runtime_version() -> None:
+    """Refuse to operate on an interpreter this runtime has not verified.
+
+    This replaces an equality check against a single hard-coded version. It is
+    deliberately still an exact allowlist, not a range: membership in
+    `VERIFIED_PYTHON_VERSIONS` requires a green native cross-Python proof run,
+    so an interpreter nobody has exercised is refused before any execution state
+    is created or reconstructed rather than attempted and hoped for.
+
+    Install-time packaging metadata (`requires-python`) is necessarily coarser
+    than an exact allowlist; this gate, not that metadata, is the authority.
+    """
+
     current = platform.python_version()
-    if current != SUPPORTED_PYTHON:
+    if current not in VERIFIED_PYTHON_VERSIONS:
         raise ContinuumError(
-            f"this Continuum runtime requires Python {SUPPORTED_PYTHON}; current is {current}"
+            f"this Continuum runtime has not verified Python {current}; verified "
+            f"versions are {list(VERIFIED_PYTHON_VERSIONS)}"
         )
 
 
@@ -239,10 +261,10 @@ def _doctor(args: argparse.Namespace) -> int:
     bundle_manifest = None
     problems = []
 
-    if current_python != SUPPORTED_PYTHON:
+    if current_python not in VERIFIED_PYTHON_VERSIONS:
         problems.append(
-            f"Python {current_python} is incompatible; exact "
-            f"CPython {SUPPORTED_PYTHON} is required"
+            f"Python {current_python} is not verified by this runtime; verified "
+            f"CPython versions are {list(VERIFIED_PYTHON_VERSIONS)}"
         )
     if current_system not in {"Linux", "Darwin", "Windows"}:
         problems.append(f"unsupported operating system: {current_system}")
@@ -278,6 +300,10 @@ def _doctor(args: argparse.Namespace) -> int:
         "python_implementation": platform.python_implementation(),
         "python_version": current_python,
         "required_python_version": SUPPORTED_PYTHON,
+        "verified_python_versions": list(VERIFIED_PYTHON_VERSIONS),
+        "container_format_version": CONTAINER_FORMAT_VERSION,
+        "execution_abi_version": EXECUTION_ABI_VERSION,
+        "graph_codec_version": GRAPH_CODEC_VERSION,
         "os": current_system,
         "architecture": current_machine,
         "continuum_home": str(continuum_home()),
@@ -295,7 +321,7 @@ def _doctor(args: argparse.Namespace) -> int:
         ),
         "evidence": {
             "format_compatible_targets": (
-                "image manifest target_compatibility; a listed pair is "
+                "image manifest execution_contract.target; a listed pair is "
                 "accepted by this runtime and is not evidence that any "
                 "continuation on that pair has been run"
             ),
@@ -862,6 +888,21 @@ def _inspect(args: argparse.Namespace) -> int:
     print(f"Source OS: {source['os']}")
     print(f"Source architecture: {source['architecture']}")
     print(f"Python version: {source['python_version']}")
+    contract = manifest.get("execution_contract")
+    if contract is not None:
+        target = contract["target"]
+        print(f"Execution ABI: {contract['execution_abi_version']}")
+        print(f"Graph codec: {contract['graph_codec_version']}")
+        print(f"IR version: {contract['ir_version']}")
+        print(f"Compatibility policy: {contract['compatibility_policy']}")
+        print(
+            "Accepted target Python versions: "
+            f"{', '.join(target['python_versions'])}"
+        )
+        print(
+            "Required capabilities: "
+            f"{', '.join(target['required_capabilities'])}"
+        )
     print(f"Frames: {manifest['frames']}")
     print(f"Heap objects: {manifest['heap_objects']}")
     print(f"Open files: {manifest['open_files']}")
@@ -879,6 +920,12 @@ def _verify(args: argparse.Namespace) -> int:
     print("Verification: passed")
     print(f"Integrity: {report['integrity']}")
     print(f"Compatibility: {report['compatibility']}")
+    contract = report["execution_contract"]
+    print(f"Compatibility policy: {contract['compatibility_policy']}")
+    if contract["compatibility_policy"] == POLICY_EXECUTION_ABI:
+        print(f"Execution ABI: {contract['execution_abi_version']}")
+        print(f"Creator Python: {contract['creator_python_version']}")
+        print(f"Restoring Python: {report['restore_python_version']}")
     print(f"Object graph: {report['graph']}")
     print(f"Frames: {report['frames']} ({manifest['frames']})")
     print(f"Resources: {report['resources']} ({manifest['open_files']})")
@@ -904,22 +951,38 @@ def _resume(args: argparse.Namespace) -> int:
             Path(new).expanduser().resolve()
         )
     loaded = load_image(args.image)
-    loaded.validate_compatibility()
-    compatibility = loaded.manifest["target_compatibility"]
-    current_architecture = {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "aarch64": "arm64",
-    }.get(platform.machine().lower(), platform.machine().lower())
-    print(
-        "Compatibility accepted: "
-        f"runtime {compatibility['runtime_version']}, "
-        f"Python {compatibility['python_version']}, "
-        f"{platform.system()} {current_architecture}, "
-        "portable IR with no native payload.",
-        file=sys.stderr,
-        flush=True,
-    )
+    decision = loaded.validate_compatibility()
+    current_architecture = normalized_architecture()
+    if decision.get("compatibility_policy") == POLICY_EXECUTION_ABI:
+        creator = decision["creator"]
+        # Name both interpreters explicitly. When they differ, this line is the
+        # operator-visible statement that a cross-Python restore was accepted on
+        # ABI grounds rather than by matching the creator.
+        print(
+            "Compatibility accepted: "
+            f"execution ABI {decision['execution_abi_version']}, "
+            f"IR {decision['ir_version']}, "
+            f"graph codec {decision['graph_codec_version']}, "
+            f"restoring under Python {platform.python_version()} on "
+            f"{platform.system()} {current_architecture}; "
+            f"image created by Continuum {creator['continuum_version']} under "
+            f"Python {creator['python_version']} on {creator['os']} "
+            f"{creator['architecture']}; portable IR with no native payload.",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        compatibility = loaded.manifest["target_compatibility"]
+        print(
+            "Compatibility accepted: "
+            f"container format {LEGACY_CONTAINER_FORMAT_VERSION} exact-version "
+            f"policy, runtime {compatibility['runtime_version']}, "
+            f"Python {compatibility['python_version']}, "
+            f"{platform.system()} {current_architecture}, "
+            "portable IR with no native payload.",
+            file=sys.stderr,
+            flush=True,
+        )
     vm = loaded.restore_vm(args.file_policy, relocations)
     source = loaded.manifest["source"]
     print(

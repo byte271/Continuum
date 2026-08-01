@@ -1,0 +1,357 @@
+name: Cross-Python public CLI continuation proof
+
+# Proves the Phase 1 capability through the public CLI only: a program is run
+# and frozen on native Linux x86_64 under CPython 3.12.13, the source process
+# exits and is reaped, and the unchanged image is verified and resumed on
+# native Apple Silicon macOS arm64 under CPython 3.13.14.
+#
+# The two jobs are separate runners, so the source machine is gone before the
+# target starts. Nothing is carried between them except the image, the control
+# output, and the evidence documents.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - claude/continuum-cross-python-abi-a839mz
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_PYTHON: 3.12.13
+  TARGET_PYTHON: 3.13.14
+  WORKLOAD: validation/cross_python/programs/layered_accumulator.py
+  HOLD_SAFE_POINT: "900"
+
+jobs:
+  linux-py312-source:
+    name: source / Linux x86_64 / CPython 3.12.13
+    runs-on: ubuntu-24.04
+    outputs:
+      source_commit: ${{ steps.identity.outputs.source_commit }}
+      image_sha256: ${{ steps.freeze.outputs.image_sha256 }}
+    steps:
+      - name: Check out the exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify a clean native Linux x86_64 source tree
+        id: identity
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain=v1)"
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Provision exact CPython ${{ env.SOURCE_PYTHON }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv python install "$SOURCE_PYTHON"
+          PYBIN_RESOLVED="$(uv python find "$SOURCE_PYTHON")"
+          echo "PYBIN=$PYBIN_RESOLVED" >> "$GITHUB_ENV"
+          test "$("$PYBIN_RESOLVED" -c 'import platform; print(platform.python_version())')" = "$SOURCE_PYTHON"
+
+      - name: Run the full suite on the creator runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" -m unittest discover -s tests
+
+      - name: Confirm the public CLI reports this runtime as verified
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" -m continuum doctor --json > doctor-source.json
+          PYTHONPATH=. "$PYBIN" - <<'PY'
+          import json
+          report = json.load(open("doctor-source.json"))
+          assert report["problems"] == [], report["problems"]
+          assert report["python_version"] == "3.12.13", report
+          assert "3.13.14" in report["verified_python_versions"], report
+          assert report["container_format_version"] == "0.2", report
+          assert report["execution_abi_version"] == "1.0", report
+          print(json.dumps(report, indent=2, sort_keys=True))
+          PY
+
+      - name: Freeze live state through continuum run and continuum freeze
+        id: freeze
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" validation/cross_python/cli_proof.py source \
+            --python "$PYBIN" \
+            --program "$WORKLOAD" \
+            --output "$RUNNER_TEMP/cross-python-source" \
+            --hold-safe-point "$HOLD_SAFE_POINT" \
+            --expect-python "$SOURCE_PYTHON" \
+            --commit "$GITHUB_SHA"
+          image="$RUNNER_TEMP/cross-python-source/source.cont"
+          test -s "$image"
+          test -s "$RUNNER_TEMP/cross-python-source/source-evidence.json"
+          echo "image_sha256=$(shasum -a 256 "$image" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Confirm the source process exited and left four live frames
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = json.loads(
+              (
+                  Path(os.environ["RUNNER_TEMP"])
+                  / "cross-python-source"
+                  / "source-evidence.json"
+              ).read_text()
+          )
+          process = evidence["source_process"]
+          assert process["exited_and_reaped_before_target"] is True, evidence
+          assert process["exit_status"] == 0, evidence
+          freeze = evidence["freeze"]
+          assert freeze["source_alive_when_request_published"] is True, freeze
+          assert freeze["request_published_before_release"] is True, freeze
+          assert evidence["cli_only"] is True, evidence
+          assert "Frames: 4" in evidence["inspect_stdout"], evidence["inspect_stdout"]
+          assert "Execution ABI: 1.0" in evidence["inspect_stdout"], evidence
+          print(json.dumps(evidence["freeze"], indent=2, sort_keys=True))
+          print(evidence["inspect_stdout"])
+          PY
+
+      - name: Upload the unchanged image, control, and source evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cross-python-cli-source-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          include-hidden-files: true
+          path: ${{ runner.temp }}/cross-python-source
+          retention-days: 90
+
+  macos-py313-target:
+    name: target / macOS arm64 / CPython 3.13.14
+    needs: linux-py312-source
+    runs-on: macos-26
+    steps:
+      - name: Check out the exact source commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Verify a clean native Apple Silicon target
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$GITHUB_SHA" = "${{ needs.linux-py312-source.outputs.source_commit }}"
+          test -z "$(git status --porcelain=v1)"
+          test "$(uname -s)" = Darwin
+          test "$(uname -m)" = arm64
+          test "$(arch)" = arm64
+          # Refuse a translated process: Rosetta would make this a proof about
+          # x86_64 emulation rather than about native arm64.
+          test "$(sysctl -in sysctl.proc_translated 2>/dev/null || echo 0)" = 0
+
+      - name: Provision exact CPython ${{ env.TARGET_PYTHON }} independently
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv python install "$TARGET_PYTHON"
+          PYBIN_RESOLVED="$(uv python find "$TARGET_PYTHON")"
+          echo "PYBIN=$PYBIN_RESOLVED" >> "$GITHUB_ENV"
+          test "$("$PYBIN_RESOLVED" -c 'import platform; print(platform.python_version())')" = "$TARGET_PYTHON"
+
+      - name: Run the full suite on the target runtime
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" -m unittest discover -s tests
+
+      - name: Download the image after the source job has finished
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cross-python-cli-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/source-artifact
+
+      - name: Confirm the image arrived byte-identical
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          source_dir="$RUNNER_TEMP/source-artifact"
+          if [[ -d "$source_dir/cross-python-source" ]]; then
+            source_dir="$source_dir/cross-python-source"
+          fi
+          echo "SOURCE_DIR=$source_dir" >> "$GITHUB_ENV"
+          actual="$(shasum -a 256 "$source_dir/source.cont" | cut -d' ' -f1)"
+          expected="${{ needs.linux-py312-source.outputs.image_sha256 }}"
+          echo "capture: $expected"
+          echo "arrival: $actual"
+          test "$actual" = "$expected"
+
+      - name: Verify and resume through continuum verify and continuum resume
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" validation/cross_python/cli_proof.py target \
+            --python "$PYBIN" \
+            --input "$SOURCE_DIR" \
+            --output "$RUNNER_TEMP/cross-python-final" \
+            --expect-python "$TARGET_PYTHON" \
+            --commit "$GITHUB_SHA"
+
+      - name: Assert every required proof property
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$PYBIN" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(
+              (
+                  Path(os.environ["RUNNER_TEMP"])
+                  / "cross-python-final"
+                  / "final-report.json"
+              ).read_text()
+          )
+
+          source = report["source"]
+          target = report["target"]
+          image = report["image"]
+          restoration = report["restoration"]
+
+          assert source["os"] == "Linux", report
+          assert source["architecture"] == "x86_64", report
+          assert source["python_version"] == "3.12.13", report
+          assert target["os"] == "Darwin", report
+          assert target["architecture"] == "arm64", report
+          assert target["python_version"] == "3.13.14", report
+
+          assert report["cross_python"] is True, report
+          assert report["cross_os"] is True, report
+          assert report["cross_architecture"] is True, report
+          assert report["cli_only"] is True, report
+
+          assert source["exited_and_reaped_before_target"] is True, report
+          assert image["byte_identical_in_transit"] is True, report
+          assert image["unchanged_by_restore"] is True, report
+
+          assert restoration["completed_actions_repeated"] == 0, restoration
+          assert restoration["combined_output_matches_control"] is True, restoration
+          assert restoration["prefix_is_control_prefix"] is True, restoration
+
+          # The restore must have been decided by the execution ABI, not by
+          # matching the creator's interpreter.
+          verify_stdout = restoration["verify_stdout"]
+          assert "Compatibility policy: execution-abi" in verify_stdout, verify_stdout
+          assert "Creator Python: 3.12.13" in verify_stdout, verify_stdout
+          assert "Restoring Python: 3.13.14" in verify_stdout, verify_stdout
+          assert "Frames: verified (4)" in verify_stdout, verify_stdout
+
+          resume_stderr = restoration["resume_stderr"]
+          assert "execution ABI 1.0" in resume_stderr, resume_stderr
+          assert "restoring under Python 3.13.14" in resume_stderr, resume_stderr
+          assert "Python 3.12.13" in resume_stderr, resume_stderr
+
+          print(json.dumps(report, indent=2, sort_keys=True))
+          print("PROOF: cross-OS, cross-ISA, cross-Python continuation via public CLI")
+          PY
+
+      - name: Upload the complete proof evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cross-python-cli-final-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          include-hidden-files: true
+          path: ${{ runner.temp }}/cross-python-final
+          retention-days: 90
+
+  differential-corpus:
+    name: differential corpus / Linux x86_64 / 3.12.13 -> 3.13.14
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the exact workflow commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Provision both exact interpreters
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          fi
+          uv python install "$SOURCE_PYTHON" "$TARGET_PYTHON"
+          echo "SOURCE_PYBIN=$(uv python find "$SOURCE_PYTHON")" >> "$GITHUB_ENV"
+          echo "TARGET_PYBIN=$(uv python find "$TARGET_PYTHON")" >> "$GITHUB_ENV"
+
+      - name: Run the paired cross-Python differential corpus
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONPATH=. "$SOURCE_PYBIN" validation/cross_python/differential.py \
+            --source-python "$SOURCE_PYBIN" \
+            --target-python "$TARGET_PYBIN" \
+            --checkpoints 6 \
+            --workdir "$RUNNER_TEMP/differential" \
+            --output "$RUNNER_TEMP/cross-python-corpus.json"
+
+      - name: Enforce the release gate on the corpus result
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          "$TARGET_PYBIN" - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          report = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "cross-python-corpus.json").read_text()
+          )
+          assert report["cross_python"] is True, report
+          assert report["silent_mismatches"] == 0, report
+          assert report["infrastructure_failures"] == 0, report
+          assert report["correctness_among_accepted_cases"] == 1.0, report
+          accepted = report["counts"].get("accepted-and-correct", 0)
+          assert accepted > 100, report["counts"]
+          summary = {k: v for k, v in report.items() if k != "case_records"}
+          print(json.dumps(summary, indent=2, sort_keys=True))
+          PY
+
+      - name: Upload the corpus report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cross-python-corpus-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/cross-python-corpus.json
+          retention-days: 90

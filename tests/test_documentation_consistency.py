@@ -9,13 +9,16 @@ failure rather than a review comment.
 
 from __future__ import annotations
 
+import platform
 import re
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from continuum import FORMAT_VERSION, IR_VERSION, SUPPORTED_PYTHON, __version__
+from continuum import FORMAT_VERSION, IR_VERSION, SUPPORTED_PYTHON, __version__, abi
+from continuum.cli import _require_runtime_version
 from continuum.compiler import compile_source
-from continuum.errors import CompileError
+from continuum.errors import CompileError, ContinuumError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,11 +27,82 @@ def read(name: str) -> str:
     return (ROOT / name).read_text(encoding="utf-8")
 
 
+def version_tuple(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.split("."))
+
+
+def requires_python() -> list[tuple[str, tuple[int, ...]]]:
+    """Parse the project's requires-python into comparable clauses.
+
+    Deliberately hand-rolled: Continuum has no runtime or test dependencies,
+    and pulling in a packaging library to read one field would add one.
+    """
+
+    match = re.search(r'^requires-python = "([^"]+)"', read("pyproject.toml"), re.M)
+    assert match is not None, "pyproject has no requires-python"
+    clauses = []
+    for part in match.group(1).split(","):
+        clause = part.strip()
+        operator = re.match(r"^(>=|<=|==|<|>)", clause)
+        assert operator is not None, f"unsupported specifier clause {clause!r}"
+        symbol = operator.group(1)
+        clauses.append((symbol, version_tuple(clause[len(symbol) :])))
+    return clauses
+
+
+def admitted_by_requires_python(value: str) -> bool:
+    candidate = version_tuple(value)
+    for symbol, bound in requires_python():
+        if symbol == ">=" and not candidate >= bound:
+            return False
+        if symbol == ">" and not candidate > bound:
+            return False
+        if symbol == "<=" and not candidate <= bound:
+            return False
+        if symbol == "<" and not candidate < bound:
+            return False
+        if symbol == "==" and candidate != bound:
+            return False
+    return True
+
+
 class VersionConsistencyTests(unittest.TestCase):
     def test_package_metadata_matches_the_runtime(self):
         pyproject = read("pyproject.toml")
         self.assertIn(f'version = "{__version__}"', pyproject)
-        self.assertIn(f'requires-python = "=={SUPPORTED_PYTHON}"', pyproject)
+
+    def test_requires_python_admits_every_verified_interpreter(self):
+        """Packaging metadata must not exclude an interpreter CI has proven.
+
+        This replaces an equality check against one hard-coded version. It is
+        strictly stronger: it requires the specifier to admit every verified
+        version, and the companion test below requires the runtime to refuse a
+        version the specifier admits but nobody verified. An exact allowlist
+        cannot be written as a PEP 440 specifier, so the two halves are tested
+        separately rather than pretending one field can express both.
+        """
+
+        for version in abi.VERIFIED_PYTHON_VERSIONS:
+            with self.subTest(version=version):
+                self.assertTrue(
+                    admitted_by_requires_python(version),
+                    f"requires-python excludes verified Python {version}",
+                )
+        self.assertTrue(admitted_by_requires_python(SUPPORTED_PYTHON))
+
+    def test_runtime_refuses_a_version_packaging_would_admit(self):
+        """The runtime allowlist, not requires-python, is the authority."""
+
+        # A real interpreter inside the install range that CI has never proven.
+        unverified = "3.13.0"
+        self.assertTrue(admitted_by_requires_python(unverified))
+        self.assertNotIn(unverified, abi.VERIFIED_PYTHON_VERSIONS)
+        with mock.patch.object(
+            platform, "python_version", return_value=unverified
+        ):
+            with self.assertRaises(ContinuumError) as caught:
+                _require_runtime_version()
+        self.assertIn("has not verified", str(caught.exception))
 
     def test_readme_version_badge_matches_the_runtime(self):
         badge = re.search(r"badge/version-([0-9a-z.]+)-", read("README.md"))

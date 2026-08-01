@@ -1,9 +1,10 @@
 # Continuum
 
 [![Cross-platform proof](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-platform-proof.yml)
+[![Cross-Python CLI proof](https://github.com/byte271/Continuum/actions/workflows/cross-python-cli-proof.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/cross-python-cli-proof.yml)
 [![Runtime bundles](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml/badge.svg)](https://github.com/byte271/Continuum/actions/workflows/runtime-bundles.yml)
-[![Version](https://img.shields.io/badge/version-0.3.1-blue.svg)](STATUS.md)
-[![Python](https://img.shields.io/badge/CPython-3.12.13-3776ab.svg)](#requirements)
+[![Version](https://img.shields.io/badge/version-0.4.0a1-blue.svg)](STATUS.md)
+[![Python](https://img.shields.io/badge/CPython-3.12.13%20%7C%203.13.14-3776ab.svg)](#requirements)
 [![Platforms](https://img.shields.io/badge/native-Linux%20%7C%20macOS%20%7C%20Windows-success.svg)](#platform-support)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -97,12 +98,39 @@ final result hash matched an uninterrupted control run byte for byte, with no
 repeated completed action. See [PORTABILITY.md](PORTABILITY.md) and the
 [validation protocol](validation/cross_platform/README.md).
 
-The verified scope remains narrow: CPython 3.12.13 exactly, one thread, a
-controlled language subset, Continuum safe points, and read-only regular
-files. Classes, closures, generators, native extensions, subprocesses,
+The verified scope remains narrow: CPython 3.12.13 and 3.13.14 exactly, one
+thread, a controlled language subset, Continuum safe points, and read-only
+regular files. Classes, closures, generators, native extensions, subprocesses,
 sockets, writable files, and arbitrary CPython frames are unsupported.
 
-That proof is immutable evidence for Continuum IR 0.2 at the commit above.
+### It has also crossed Python versions
+
+At commit
+[`40cc9dd`](https://github.com/byte271/Continuum/commit/40cc9dd0ed1b2a81dfd265665c1232363d496dc8)
+([Actions run 30658976309](https://github.com/byte271/Continuum/actions/runs/30658976309)),
+a program was started and frozen on native Linux x86_64 under **CPython
+3.12.13**, the source process exited and was reaped, and the unchanged image was
+verified and resumed on a native Apple Silicon macOS arm64 runner under
+**CPython 3.13.14**.
+
+The whole path used only the public CLI — `continuum run`, `continuum freeze`,
+`continuum verify`, `continuum resume`. The image SHA-256 was
+`3b564d9d37a9353ebb22027a4b3597d30fc2eef1272c3a220fc7f65e3d939824` at capture,
+on arrival, and after restore. Four live logical frames were restored, zero
+completed actions repeated, and source-plus-target output equalled an
+independently run uninterrupted control.
+
+This works because Continuum's execution state lives in its own VM — explicit
+frames, logical program counters, operand stacks, and lexical cells — rather
+than in CPython frame objects, and because the target restores the IR stored in
+the image instead of recompiling the source. The restore is authorized by an
+explicit execution ABI plus an exact interpreter allowlist, not by matching the
+creator's interpreter. What is **not** claimed: arbitrary Python versions,
+arbitrary process migration, or native CPython frame migration.
+
+The cross-platform proof described two sections above — run 30489463484 at
+commit `15bceef` — is immutable evidence for Continuum IR 0.2 at that commit.
+It is a separate result from the cross-Python proof at `40cc9dd`.
 
 The same two-job workflow was rerun for IR 0.3 at runtime `0.2.0a1`: its
 `linux-source` and dependent `macos-target` jobs passed at commit
@@ -152,12 +180,16 @@ the stage-by-stage hostile audit is [AUDIT.md](AUDIT.md).
 
 ## Requirements
 
-- CPython 3.12.13 exactly;
+- CPython 3.12.13 or 3.13.14, exactly — these are the versions verified end to
+  end by native CI;
 - Linux x86_64, Apple Silicon macOS arm64, or Windows x86_64;
 - one thread;
 - only the standard library is needed.
 
-The exact patch version is intentional while the image and IR are unstable.
+The allowlist is exact rather than a range, and it is enforced at runtime, not
+just at install time. `3.13.0` and `3.12.14` are refused as firmly as `3.9`,
+because neither has been proven. Adding a version requires a green cross-Python
+proof run, not a version bump. See [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Run
 
@@ -244,7 +276,7 @@ source host recorded it; `NEW` is resolved on the current host.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 180 tests and is run natively on Linux x86_64, Apple
+The suite discovers 313 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

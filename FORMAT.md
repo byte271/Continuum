@@ -1,4 +1,4 @@
-# Continuum Portable Process Image 0.1
+# Continuum Portable Process Image 0.2
 
 ## Container
 
@@ -131,20 +131,30 @@ the author. Version 0.1 does not implement signatures and reports
 
 The current writer requires:
 
-- image format 0.1;
+- image format 0.2;
 - IR 0.4;
-- Continuum runtime 0.3.1;
-- CPython 3.12.13;
+- Continuum runtime 0.4.0a1;
+- CPython 3.12.13 or 3.13.14, the exact versions in
+  `abi.VERIFIED_PYTHON_VERSIONS`;
 - target OS Linux, Darwin, or Windows;
 - target architecture x86_64 or arm64;
-- a target `(OS, architecture)` pair listed in
-  `target_compatibility.platforms`;
+- a target `(OS, architecture)` pair listed in `execution_contract.target`
+  **and** accepted by the reading runtime;
 - `native_payload_required: false`;
 - only the mandatory capabilities implemented by this runtime.
 
-`target_compatibility.platforms` currently lists Linux x86_64, Linux arm64,
-Darwin x86_64, Darwin arm64, and Windows x86_64. Windows arm64 is absent and
-is rejected on the pair check.
+`execution_contract.target.platforms` currently lists Linux x86_64, Linux
+arm64, Darwin x86_64, Darwin arm64, and Windows x86_64. Windows arm64 is absent
+and is rejected on the pair check.
+
+The platform pair and the Python version are each decided twice: once against
+the list the image carries, and once against the reading runtime's own accepted
+list (`abi.VERIFIED_PLATFORMS`, `abi.VERIFIED_PYTHON_VERSIONS`). An image that
+adds Windows arm64 to its own lists and recomputes every archive checksum is
+still refused, because the runtime never accepted that pair.
+
+Container format 0.1 images carry `target_compatibility` instead of
+`execution_contract` and are read under the legacy exact-version rule.
 
 These declarations describe what a reader will attempt to restore. They are
 not evidence that the pair has been exercised: see

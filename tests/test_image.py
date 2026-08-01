@@ -10,6 +10,8 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+from continuum import abi
+from continuum.abi import Host, IncompatibleImage, REASON_MISSING_CAPABILITY
 from continuum.compiler import compile_source
 from continuum.errors import ImageError, UnsupportedObjectError
 from continuum.image import load_image, save_image, verify_image
@@ -90,30 +92,23 @@ class ImageTests(unittest.TestCase):
             image = make_live_image(Path(temporary))
             loaded = load_image(image)
 
-        self.assertIn(
-            {"os": "Windows", "architecture": "x86_64"},
-            loaded.manifest["target_compatibility"]["platforms"],
-        )
-        self.assertNotIn(
-            {"os": "Windows", "architecture": "arm64"},
-            loaded.manifest["target_compatibility"]["platforms"],
-        )
+        platforms = loaded.manifest["execution_contract"]["target"]["platforms"]
+        self.assertIn({"os": "Windows", "architecture": "x86_64"}, platforms)
+        self.assertNotIn({"os": "Windows", "architecture": "arm64"}, platforms)
 
     def test_unsupported_windows_arm64_pair_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:
             image = make_live_image(Path(temporary))
             loaded = load_image(image)
-            with (
-                patch("continuum.image.platform.system", return_value="Windows"),
-                patch(
-                    "continuum.image._normalized_architecture",
-                    return_value="arm64",
-                ),
-            ):
-                with self.assertRaisesRegex(
-                    ImageError, "target platform is unsupported"
-                ):
-                    loaded.validate_compatibility()
+            # The contract takes the deciding host explicitly, so an
+            # unsupported platform pair is testable without monkeypatching
+            # the platform module out from under the runtime.
+            windows_arm64 = Host("3.12.13", "Windows", "arm64")
+            with self.assertRaises(IncompatibleImage) as caught:
+                loaded.validate_compatibility(windows_arm64)
+            self.assertEqual(
+                caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM
+            )
 
     def test_verify_deeply_checks_image_without_executing_program(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -189,13 +184,20 @@ class ImageTests(unittest.TestCase):
 
             def alter(entries):
                 manifest = json.loads(entries["manifest.json"])
-                manifest["target_compatibility"]["python_version"] = "0.0.0"
+                manifest["execution_contract"]["creator"][
+                    "python_version"
+                ] = "0.0.0"
                 replace_json_and_rehash(
                     entries, "manifest.json", manifest
                 )
 
             rewrite_archive(image, incompatible, alter)
-            with self.assertRaisesRegex(ImageError, "runtime metadata is inconsistent"):
+            # Rewriting creator provenance and recomputing every archive
+            # checksum still fails: the contract must agree with runtime.json
+            # and the manifest source section, not merely hash correctly.
+            with self.assertRaisesRegex(
+                ImageError, "creator Python provenance disagrees"
+            ):
                 load_image(incompatible)
 
     def test_image_has_no_native_executable_payload(self):
@@ -257,14 +259,19 @@ while index < 10:
 
             def alter(entries):
                 manifest = json.loads(entries["manifest.json"])
-                manifest["target_compatibility"]["required_capabilities"].append(
-                    "execute-native-pointer-table"
-                )
+                manifest["execution_contract"]["target"][
+                    "required_capabilities"
+                ].append("execute-native-pointer-table")
                 replace_json_and_rehash(entries, "manifest.json", manifest)
 
             rewrite_archive(image, altered, alter)
-            with self.assertRaisesRegex(ImageError, "unknown mandatory"):
-                load_image(altered)
+            # Structural load succeeds; the capability this runtime cannot
+            # provide is refused by the compatibility decision, with a reason
+            # code rather than only prose.
+            loaded = load_image(altered)
+            with self.assertRaises(IncompatibleImage) as caught:
+                loaded.validate_compatibility()
+            self.assertEqual(caught.exception.reason, REASON_MISSING_CAPABILITY)
 
     def test_truncated_zip_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

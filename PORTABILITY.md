@@ -31,12 +31,14 @@ therefore cannot succeed across hosts with different path forms.
 
 Resume rejects an image unless all of these checks pass:
 
-- format 0.1 and current IR 0.4 schema validation;
-- Continuum runtime implementation and exact runtime version `0.3.1`;
-- CPython 3.12.13;
+- container format 0.2 (or legacy 0.1) and current IR 0.4 schema validation;
+- Continuum runtime implementation. Container format 0.2 images no longer require an exact runtime version `0.4.0a1`; they require the execution ABI and the capability set. Container format 0.1 images still require it exactly;
+- CPython 3.12.13 or 3.13.14 for container format 0.2 (the exact verified
+  allowlist); exactly the creator's CPython for legacy format 0.1;
 - target OS in `Linux`, `Darwin`, `Windows`;
 - target architecture in `x86_64`, `arm64`;
-- the exact target `(OS, architecture)` pair in the manifest platform list;
+- the exact target `(OS, architecture)` pair in the image's platform list
+  **and** in the reading runtime's own accepted list, `abi.VERIFIED_PLATFORMS`;
 - `native_payload_required` is false;
 - every mandatory capability is recognized;
 - source, IR, module, runtime, resource, frame, heap-count, and checksum
@@ -46,6 +48,11 @@ The accepted pairs are Linux x86_64, Linux arm64, Darwin x86_64, Darwin arm64,
 and Windows x86_64. Windows arm64 is not an accepted pair and is rejected by
 the pair check even though `Windows` and `arm64` each appear in the preceding
 lists.
+
+That rejection does not depend on the image being honest. The pair is checked
+against the reading runtime's own list as well as the image's, so an image that
+inserts Windows arm64 into its platform list and recomputes every archive
+checksum is still refused.
 
 Accepting a target pair is a format-compatibility decision only. It states
 that this runtime will attempt the restore, not that the pair has ever been
@@ -65,7 +72,9 @@ implementation and can still have platform-specific behavior.
 | Proof commit, IR 0.2/runtime 0.1.1.dev0 | Native GitHub-hosted Linux x86_64 VM | Native GitHub-hosted Apple Silicon macOS arm64 | **verified**; Actions run 30489463484, 26/26 conditions |
 | IR 0.4/runtime 0.2.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30592158078 at commit `21f7b2e`, carrying a class, an instance, a live handler, variadic bindings, and a shared closure cell |
 | Release IR 0.4/runtime 0.3.0 | Native Linux x86_64 | Native Apple Silicon macOS arm64 | **verified**; Actions run 30596179154 at commit `023f74c` |
+| Container format 0.2/IR 0.4/execution ABI 1.0/runtime 0.4.0a1 | Native Linux x86_64, **CPython 3.12.13** | Native Apple Silicon macOS arm64, **CPython 3.13.14** | **verified**; Actions run 30658976309 at commit `40cc9dd`, image SHA-256 `3b564d9d37a9353ebb22027a4b3597d30fc2eef1272c3a220fc7f65e3d939824` identical at capture, on arrival, and after restore; driven entirely through the public CLI; 4 live frames; 0 completed actions repeated |
 | Any revision | Native Windows x86_64 | Any other platform | unverified; no workflow generates or resumes a cross-host Windows image |
+| Container format 0.2 | Any CPython outside `abi.VERIFIED_PYTHON_VERSIONS` | Any | unverified and refused before execution; the allowlist is exact, so 3.13.0 and 3.12.14 are refused as firmly as 3.9 |
 | Any revision | Any other platform | Native Windows x86_64 | unverified; no workflow generates or resumes a cross-host Windows image |
 | Any revision | Linux x86_64 host | Second native Linux x86_64 environment | unverified |
 | Any revision | Any other native cross-architecture pair | Any | unverified |

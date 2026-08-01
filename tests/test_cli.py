@@ -11,6 +11,11 @@ from types import SimpleNamespace
 from unittest import mock
 
 from continuum import IR_VERSION, SUPPORTED_PYTHON, __version__
+from continuum.abi import (
+    CONTAINER_FORMAT_VERSION,
+    VERIFIED_PYTHON_VERSIONS,
+    build_contract,
+)
 from continuum.cli import _doctor, _resume
 
 
@@ -27,7 +32,13 @@ class DoctorTests(unittest.TestCase):
         report = json.loads(output.getvalue())
         self.assertEqual(report["continuum_version"], __version__)
         self.assertEqual(report["continuum_ir_version"], IR_VERSION)
-        self.assertEqual(report["python_version"], SUPPORTED_PYTHON)
+        # Doctor must succeed on every verified interpreter, not only on the
+        # one the exact-version path shipped against.
+        self.assertIn(report["python_version"], VERIFIED_PYTHON_VERSIONS)
+        self.assertEqual(report["required_python_version"], SUPPORTED_PYTHON)
+        self.assertEqual(
+            report["verified_python_versions"], list(VERIFIED_PYTHON_VERSIONS)
+        )
         self.assertEqual(
             report["verified_cross_platform_paths"],
             ["Linux x86_64 -> macOS arm64"],
@@ -94,7 +105,10 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(result, 2)
         report = json.loads(output.getvalue())
-        self.assertIn("exact CPython 3.12.13 is required", report["problems"][0])
+        # 3.12.12 is one patch below a verified version: close is still refused,
+        # because the allowlist is exact rather than a range.
+        self.assertIn("is not verified by this runtime", report["problems"][0])
+        self.assertIn("3.12.12", report["problems"][0])
 
     def test_doctor_accepts_windows_x86_64(self):
         output = io.StringIO()
@@ -164,14 +178,17 @@ class DoctorTests(unittest.TestCase):
         class FakeImage:
             manifest = {
                 "source": {"os": "Windows", "architecture": "x86_64"},
-                "target_compatibility": {
-                    "runtime_version": __version__,
-                    "python_version": SUPPORTED_PYTHON,
-                },
+                "format_version": CONTAINER_FORMAT_VERSION,
+                "execution_contract": build_contract(
+                    "Windows", "x86_64", SUPPORTED_PYTHON, __version__
+                ),
             }
 
             def validate_compatibility(self):
                 observed["validated"] = True
+                return build_contract(
+                    "Windows", "x86_64", SUPPORTED_PYTHON, __version__
+                )
 
             def restore_vm(self, policy, relocations):
                 observed["policy"] = policy
