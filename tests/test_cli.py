@@ -13,6 +13,7 @@ from unittest import mock
 from continuum import IR_VERSION, SUPPORTED_PYTHON, __version__
 from continuum.abi import (
     CONTAINER_FORMAT_VERSION,
+    VERIFIED_PLATFORMS,
     VERIFIED_PYTHON_VERSIONS,
     build_contract,
 )
@@ -131,6 +132,36 @@ class DoctorTests(unittest.TestCase):
             "Windows x86_64 -> ",
             " ".join(report["verified_cross_platform_paths"]),
         )
+
+    def test_doctor_refuses_a_platform_pair_the_runtime_does_not_accept(self):
+        """Membership in both axes is not membership in the pair set.
+
+        Windows is a supported operating system and arm64 is a supported
+        architecture, but the pair is not one this runtime accepts, and a
+        restore on it is refused. `doctor` answers "will this host work?", so
+        reporting no problem here would be reporting the opposite of the truth.
+        """
+
+        self.assertNotIn(("Windows", "arm64"), VERIFIED_PLATFORMS)
+        output = io.StringIO()
+        with (
+            mock.patch.dict(os.environ, {"CONTINUUM_BUNDLE_MANIFEST": ""}),
+            mock.patch.object(platform, "system", return_value="Windows"),
+            mock.patch.object(platform, "machine", return_value="ARM64"),
+            redirect_stdout(output),
+        ):
+            result = _doctor(argparse.Namespace(json=True))
+
+        report = json.loads(output.getvalue())
+        self.assertEqual(report["os"], "Windows")
+        self.assertEqual(report["architecture"], "arm64")
+        self.assertNotEqual(result, 0)
+        self.assertTrue(
+            any("Windows arm64" in problem for problem in report["problems"]),
+            report["problems"],
+        )
+        # The runtime is the authority; doctor must not invent its own list.
+        self.assertNotIn("Windows arm64", report["format_compatible_targets"])
 
     def test_doctor_validates_self_contained_manifest(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -23,7 +23,7 @@ has no Windows job.
   resumed on a native Apple Silicon macOS arm64 runner under CPython 3.13.14.
   Actions run
   [30682958879](https://github.com/byte271/Continuum/actions/runs/30682958879),
-  evaluated on merge commit `d328397`. Four active frames and twenty bindings
+  evaluated on GitHub's pull-request merge commit `d328397`, which is generated per run and is not reachable from any branch in this repository. Four active frames and twenty bindings
   mapped totally,
   the original image byte-identical throughout, 30 action nonces each executed
   exactly once, zero repeated, the old revision's future behavior absent and
@@ -112,7 +112,7 @@ has no Windows job.
   all four gates for 35 programs (70.0%), up from 32 (64.0%) before default
   arguments. That rate is a Linux x86_64 measurement; the suite exercises two
   corpus programs through all four gates on every host.
-- Current full suite: 402 tests discovered. Tests skip only where the host
+- Current full suite: 408 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

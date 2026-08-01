@@ -16,6 +16,7 @@ import json
 import tempfile
 import unittest
 import unittest.mock
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -561,7 +562,17 @@ class PlanIntegrityTests(MigrationCase):
         with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
             for entry, content in sorted(entries.items()):
                 archive.writestr(entry, content)
-            archive.writestr("plan.json", entries["plan.json"])
+            # Writing the name twice is the point of the fixture, and CPython
+            # warns about it. Scoped here so the warning cannot be mistaken for
+            # one the runtime emitted, and so a real warning still stands out.
+            with warnings.catch_warnings():
+                # Matched on message, not category alone: a blanket UserWarning
+                # filter would also swallow an unrelated future warning from
+                # this same write, which is the opposite of the intent.
+                warnings.filterwarnings(
+                    "ignore", category=UserWarning, message=r"Duplicate name: "
+                )
+                archive.writestr("plan.json", entries["plan.json"])
         with self.assertRaises(MigrationRefused) as caught:
             migration.read_plan(target)
         self.assertEqual(caught.exception.reason, migration.REFUSE_PLAN_TAMPERED)
@@ -655,6 +666,33 @@ class MalformedPlanContentTests(MigrationCase):
         self.assert_refused(
             self.rebuild("notobject", mutate), migration.REFUSE_MALFORMED_PLAN
         )
+
+    def test_a_plan_omitting_any_required_field_is_refused(self):
+        """Every name in `PLAN_FIELDS` must actually be enforced.
+
+        A tuple of required names is only a contract if each entry is checked.
+        Dropping one at a time proves the check covers the whole tuple, rather
+        than the handful of fields one hand-written fixture happens to omit.
+        The archive checksum is recomputed each time, so the refusal comes from
+        the field check and not from a mismatched digest.
+        """
+
+        for field in migration.PLAN_FIELDS:
+            with self.subTest(field=field):
+
+                def mutate(entries, field=field):
+                    plan = json.loads(entries["plan.json"])
+                    self.assertIn(field, plan, "fixture never had this field")
+                    del plan[field]
+                    entries["plan.json"] = json.dumps(
+                        plan, sort_keys=True, separators=(",", ":")
+                    ).encode("utf-8")
+
+                error = self.assert_refused(
+                    self.rebuild(f"missing-{field}", mutate),
+                    migration.REFUSE_MALFORMED_PLAN,
+                )
+                self.assertIn(field, str(error))
 
     def test_a_checksums_document_without_entries_is_refused(self):
         def mutate(entries):

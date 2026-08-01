@@ -66,7 +66,20 @@ jobs:
           count=$("$PYBIN" -c "import unittest; l=unittest.TestLoader(); s=l.discover('tests', top_level_dir='.'); assert not l.errors, l.errors; f=lambda x: sum(map(f,x)) if isinstance(x,unittest.TestSuite) else 1; print(f(s))")
           echo "discovered $count tests"
           # A mistyped module name would otherwise repeat nothing, silently.
-          test "$count" -ge 160 || { echo "discovery too low: $count"; exit 1; }
+          # The gate tracks the published suite size. A loose floor -- this read
+          # `-ge 160` against a 402-test suite -- passes a regression that
+          # silently drops more than half of discovery, which is precisely what
+          # this preflight exists to catch.
+          # Captured with `|| documented=""` because `set -e` plus `pipefail`
+          # would otherwise abort on a no-match grep, killing the job before the
+          # diagnostic below can say why. `sed -n 1p` rather than `head -1` so a
+          # second match cannot SIGPIPE the producer under pipefail.
+          documented=$(grep -oE '[0-9]{2,4} tests' docs/TESTING.md \
+            | sed -n 1p | cut -d' ' -f1) || documented=""
+          test -n "$documented" || { echo "docs/TESTING.md states no count"; exit 1; }
+          test "$count" -eq "$documented" || {
+            echo "discovery $count does not match the documented $documented"
+            exit 1; }
 
       - name: Repeat the targeted race regressions
         shell: bash

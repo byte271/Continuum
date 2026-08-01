@@ -165,9 +165,21 @@ class TestCountConsistencyTests(unittest.TestCase):
             claims.extend(re.findall(r"\b(\d{2,4}) tests\b", paragraph))
         return claims
 
+    # The notes for the release currently being prepared describe the suite as
+    # it stands, so their count is a current claim and is checked. The notes for
+    # a release that already shipped are a record of what was true then; those
+    # are not listed, exactly as a completed roadmap milestone is not.
+    CURRENT = (
+        "README.md",
+        "STATUS.md",
+        "docs/TESTING.md",
+        "ROADMAP.md",
+        "docs/RELEASE_NOTES_0.5.0a1.md",
+    )
+
     def test_documented_counts_match_discovery(self):
         actual = self.discovered()
-        for name in ("README.md", "STATUS.md", "docs/TESTING.md", "ROADMAP.md"):
+        for name in self.CURRENT:
             for claimed in self.current_claims(name):
                 with self.subTest(document=name, claimed=claimed):
                     self.assertEqual(
