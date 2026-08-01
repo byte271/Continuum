@@ -120,6 +120,36 @@ def wait_for(
     raise TimeoutError(f"timed out waiting for {needle!r}")
 
 
+def native_payload_required(manifest: dict[str, object]) -> bool:
+    """Read the native-payload flag from whichever container format carries it.
+
+    Format 0.1 kept the flag in `target_compatibility`. Format 0.2 moved it into
+    the execution contract's target section and drops the older key entirely, so
+    reading only the 0.1 location raised `KeyError` on every 0.2 image.
+
+    A manifest carrying neither location raises rather than defaulting to
+    `False`: the target job reads this value back as proof that the image needs
+    no native payload, and a default would assert that without evidence. A
+    non-boolean is refused for the same reason -- the target compares with
+    `is False`, which a coerced value would satisfy without ever having said so.
+    """
+
+    contract = manifest.get("execution_contract")
+    target = contract.get("target") if isinstance(contract, dict) else None
+    for section in (target, manifest.get("target_compatibility")):
+        if isinstance(section, dict) and "native_payload_required" in section:
+            value = section["native_payload_required"]
+            if not isinstance(value, bool):
+                raise RuntimeError(
+                    f"native_payload_required is not a boolean: {value!r}"
+                )
+            return value
+    raise RuntimeError(
+        "manifest carries no native_payload_required flag; format_version "
+        f"{manifest.get('format_version')!r}"
+    )
+
+
 def inspect_live_image(image: Path) -> dict[str, object]:
     from continuum.image import load_image
 
@@ -458,9 +488,7 @@ def perform(args: argparse.Namespace, output: Path) -> dict[str, object]:
         "file_resource_count": len(file_records),
         "operand_stack_items": operand_depth,
         "control_blocks": control_depth,
-        "native_payload_required": manifest["target_compatibility"][
-            "native_payload_required"
-        ],
+        "native_payload_required": native_payload_required(manifest),
         "image": image.name,
         "image_bytes": image_size,
         "image_sha256": image_hash,
