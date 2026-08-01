@@ -30,6 +30,7 @@ import os
 import random
 import subprocess
 import sys
+import tempfile
 import time
 from collections import Counter
 from pathlib import Path
@@ -39,7 +40,7 @@ REPOSITORY = Path(__file__).resolve().parents[2]
 if str(REPOSITORY) not in sys.path:
     sys.path.insert(0, str(REPOSITORY))
 
-from continuum.abi import IncompatibleImage  # noqa: E402
+from continuum.abi import IncompatibleImage, normalized_architecture  # noqa: E402
 from continuum.compiler import compile_source  # noqa: E402
 from continuum.errors import (  # noqa: E402
     CompileError,
@@ -414,6 +415,12 @@ def worker() -> int:
                 "python_version": platform.python_version(),
                 "os": platform.system(),
                 "machine": platform.machine(),
+                # `machine` is the raw host spelling and differs between hosts
+                # for one ISA -- `x86_64` on Linux, `AMD64` on Windows. Storing
+                # only that makes two runs on the same architecture look like
+                # two architectures. `cli_proof.py` and `live_migration/proof.py`
+                # already record the normalized name; this now matches them.
+                "architecture": normalized_architecture(),
             }
         else:
             raise ValueError(f"unknown action {action!r}")
@@ -774,9 +781,15 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     root.add_argument("--source-python", default=sys.executable)
     root.add_argument("--target-python", default=sys.executable)
-    root.add_argument("--checkpoints", type=int, default=5)
+    # 6 is what `cross-python-cli-proof.yml` passes and what every published
+    # corpus was generated with. A different local default meant a plain run
+    # could not reproduce the archived evidence.
+    root.add_argument("--checkpoints", type=int, default=6)
     root.add_argument("--program", action="append", default=[])
-    root.add_argument("--workdir", default="/tmp/continuum-differential")
+    root.add_argument(
+        "--workdir",
+        default=str(Path(tempfile.gettempdir()) / "continuum-differential"),
+    )
     root.add_argument(
         "--output",
         default=str(REPOSITORY / "compatibility" / "results" / "cross-python.json"),
