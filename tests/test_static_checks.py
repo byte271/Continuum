@@ -114,5 +114,47 @@ class ScriptImportTests(unittest.TestCase):
                     self.fail(f"{name} does not compile: {exc}")
 
 
+class TestModuleLayoutTests(unittest.TestCase):
+    """A `unittest.main()` guard must be the last thing in a test module.
+
+    `unittest discover` imports a module, so a guard placed above later
+    `TestCase` classes still collects them and CI stays green. Running the file
+    directly executes the guard first and the process exits before those
+    classes exist -- reporting success for tests that never ran. Three
+    regression tests for the stale-identifier fix sat below such a guard.
+    """
+
+    def test_the_main_guard_is_last_in_every_test_module(self):
+        import ast
+
+        findings = []
+        for path in sorted((ROOT / "tests").glob("test_*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            guards = [
+                node.lineno
+                for node in tree.body
+                if isinstance(node, ast.If)
+                and ast.dump(node.test).find("__main__") != -1
+            ]
+            if not guards:
+                continue
+            later = [
+                node.name
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.lineno > guards[-1]
+            ]
+            if later:
+                findings.append(
+                    f"{path.name}: {', '.join(later)} defined after the "
+                    f"__main__ guard on line {guards[-1]}"
+                )
+        self.assertEqual(
+            findings,
+            [],
+            "test classes below a __main__ guard never run on a direct "
+            "invocation:\n" + "\n".join(findings),
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

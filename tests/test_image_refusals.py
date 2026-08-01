@@ -652,8 +652,6 @@ answer = work(20)
         self.assertNotIn("STEP", captured.getvalue())
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class AdversarialPlatformWideningTests(ImageRefusalCase):
@@ -734,3 +732,7 @@ class AdversarialPlatformWideningTests(ImageRefusalCase):
             with self.assertRaises(IncompatibleImage) as caught:
                 verify_image(target)
         self.assertEqual(caught.exception.reason, abi.REASON_UNSUPPORTED_PLATFORM)
+
+
+if __name__ == "__main__":
+    unittest.main()
