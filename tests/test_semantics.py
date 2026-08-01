@@ -245,7 +245,7 @@ class SafepointIdentityTests(unittest.TestCase):
         """
         # Occurrence 2 is the `print(f"ACTION {index}")` statement, inside the
         # while body: the statement the edit below actually wraps.
-        model, function, point = active_site(BASE, LEAF, "SAFEPOINT", occurrence=2)
+        _model, function, point = active_site(BASE, LEAF, "SAFEPOINT", occurrence=2)
         self.assertTrue(
             point.evidence()["control_region_path"],
             "the chosen resume point must start inside a control region",

@@ -128,14 +128,35 @@ class TestModuleLayoutTests(unittest.TestCase):
         import ast
 
         findings = []
+        def is_main_guard(node) -> bool:
+            """`if __name__ == "__main__":`, matched structurally.
+
+            Searching the dumped tree for the string would also match an
+            unrelated condition such as `if runner == "__main__":`. One of
+            those appearing below the real guard would move the reference
+            line past the classes this check exists to find.
+            """
+
+            if not isinstance(node, ast.If):
+                return False
+            test = node.test
+            if not isinstance(test, ast.Compare) or len(test.ops) != 1:
+                return False
+            if not isinstance(test.ops[0], ast.Eq):
+                return False
+            left, right = test.left, test.comparators[0]
+            if isinstance(right, ast.Name) and isinstance(left, ast.Constant):
+                left, right = right, left
+            return (
+                isinstance(left, ast.Name)
+                and left.id == "__name__"
+                and isinstance(right, ast.Constant)
+                and right.value == "__main__"
+            )
+
         for path in sorted((ROOT / "tests").glob("test_*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-            guards = [
-                node.lineno
-                for node in tree.body
-                if isinstance(node, ast.If)
-                and ast.dump(node.test).find("__main__") != -1
-            ]
+            guards = [node.lineno for node in tree.body if is_main_guard(node)]
             if not guards:
                 continue
             later = [
