@@ -1006,5 +1006,84 @@ class ApplyPlanShapeTests(MigrationCase):
         )
 
 
+class VerifiedPlanBindingTests(MigrationCase):
+    """What gets applied must be what got verified.
+
+    `verify_plan` proves a plan by re-deriving it. If the caller then reads the
+    path a second time to obtain the object it applies, the proof covers a
+    different read. A substituted plan that is internally self-consistent for
+    the same image satisfies every check `read_plan` and `apply_plan` make on
+    their own, so the substitution would not be detected.
+    """
+
+    # A third revision, also legitimately applicable to the shared image, so a
+    # substituted plan is valid rather than merely malformed.
+    REVISION_C = REVISION_A.replace(
+        '        print(f"ACTION {index} {tally.total}")',
+        '        print(f"ACTION {index} {tally.total}")\n        print(f"SWAPPED {index}")',
+    ).replace('print(f"FINAL {answer}', 'print(f"FINAL-V3 {answer}')
+
+    def written_plan(self, revision, name):
+        plan = self.plan_for(revision, f"{name}.py")
+        path = self.root / f"{name}.cup"
+        migration.write_plan(
+            path, plan, revision, compile_source(revision, "prog.py")
+        )
+        return path
+
+    def test_the_plan_is_read_exactly_once(self):
+        path = self.written_plan(REVISION_B, "once")
+        calls = []
+        real = migration.read_plan
+
+        def counting(argument):
+            calls.append(argument)
+            return real(argument)
+
+        with unittest.mock.patch.object(migration, "read_plan", counting):
+            migration.load_verified_plan(self.image, path)
+        self.assertEqual(len(calls), 1, f"plan was read {len(calls)} times")
+
+    def test_a_plan_substituted_during_verification_is_not_the_one_applied(self):
+        """The race the single read closes, played out concretely."""
+
+        first = self.written_plan(REVISION_B, "first")
+        second = self.written_plan(self.REVISION_C, "second")
+        # Confirm the substitute is a genuinely valid plan for this image, so
+        # the test is about which plan is applied and not about validity.
+        self.assertEqual(
+            migration.verify_plan(self.image, second)["integrity"], "verified"
+        )
+
+        real = migration.plan_upgrade
+
+        def swap_after_rederivation(image_path, candidate):
+            result = real(image_path, candidate)
+            # Verification has now read the plan and re-derived it. An attacker
+            # with write access to the path swaps in the other valid plan here.
+            first.write_bytes(second.read_bytes())
+            return result
+
+        with unittest.mock.patch.object(
+            migration, "plan_upgrade", swap_after_rederivation
+        ):
+            _report, plan, new_source, _new_ir = migration.load_verified_plan(
+                self.image, first
+            )
+
+        self.assertIn("FINAL-V2", new_source)
+        self.assertNotIn("SWAPPED", new_source)
+        self.assertEqual(
+            plan["new_source_sha256"],
+            migration._sha256(REVISION_B.encode("utf-8")),
+        )
+
+    def test_verify_plan_still_reports_without_applying(self):
+        report = migration.verify_plan(self.image, self.written_plan(REVISION_B, "rep"))
+        self.assertEqual(report["integrity"], "verified")
+        self.assertEqual(report["execution"], "not started")
+        self.assertTrue(report["independently_rederived"])
+
+
 if __name__ == "__main__":
     unittest.main()

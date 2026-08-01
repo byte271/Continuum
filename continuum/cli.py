@@ -38,6 +38,7 @@ from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
 from .migration import (
     PLAN_FORMAT_VERSION,
     apply_plan,
+    load_verified_plan,
     plan_upgrade as build_upgrade_plan,
     read_plan,
     sha256_file,
@@ -1092,11 +1093,11 @@ def _resume(args: argparse.Namespace) -> int:
     vm = loaded.restore_vm(args.file_policy, relocations)
     upgrade = getattr(args, "upgrade", None)
     if upgrade:
-        # Verify before applying. Verification independently re-derives the
-        # plan from this image and the plan's own new source, so a tampered or
-        # mismatched plan is refused before any state is moved.
-        verify_plan(args.image, upgrade)
-        plan, _new_source, new_ir = read_plan(upgrade)
+        # Verify before applying, and apply the object that was verified. One
+        # read: verifying a path and then reading it again would apply whatever
+        # the second read returned, and a substituted plan that is internally
+        # self-consistent for this image passes every check apply_plan makes.
+        _report, plan, _new_source, new_ir = load_verified_plan(args.image, upgrade)
         apply_plan(vm, plan, new_ir)
         print(
             "Migration applied: "

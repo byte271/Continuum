@@ -835,14 +835,19 @@ def read_plan(path: str | os.PathLike[str]) -> tuple[dict[str, Any], str, dict[s
     return plan, new_source, new_ir
 
 
-def verify_plan(
+def load_verified_plan(
     image_path: str | os.PathLike[str], plan_path: str | os.PathLike[str]
-) -> dict[str, Any]:
-    """Independently re-derive the plan and confirm it matches, byte for byte.
+) -> tuple[dict[str, Any], dict[str, Any], str, dict[str, Any]]:
+    """Verify a plan and return the very objects that were verified.
 
     Verification does not trust the plan's mappings. It recomputes them from the
     image and the plan's own new source, and refuses if anything differs. It
     never executes the user program.
+
+    The plan is read exactly once. A caller that verified a path and then read
+    it again would be applying whatever the second read returned, and a second
+    self-consistent plan for the same image passes every internal check, so the
+    applied plan has to be the same object that verification examined.
     """
 
     plan, new_source, new_ir = read_plan(plan_path)
@@ -874,7 +879,7 @@ def verify_plan(
             "the plan does not match an independent re-derivation from the "
             "image and its declared new source",
         )
-    return {
+    report = {
         "plan_format_version": plan["plan_format_version"],
         "execution_abi_version": plan["execution_abi_version"],
         "original_image_sha256": plan["original_image_sha256"],
@@ -887,6 +892,16 @@ def verify_plan(
         "integrity": "verified",
         "execution": "not started",
     }
+    return report, plan, new_source, new_ir
+
+
+def verify_plan(
+    image_path: str | os.PathLike[str], plan_path: str | os.PathLike[str]
+) -> dict[str, Any]:
+    """Report on a plan without applying it. See `load_verified_plan`."""
+
+    report, _plan, _new_source, _new_ir = load_verified_plan(image_path, plan_path)
+    return report
 
 
 def apply_plan(vm: Any, plan: dict[str, Any], new_ir: dict[str, Any]) -> None:
@@ -1029,6 +1044,7 @@ __all__ = [
     "MigrationRefused",
     "PLAN_FORMAT_VERSION",
     "apply_plan",
+    "load_verified_plan",
     "plan_upgrade",
     "read_plan",
     "sha256_file",
