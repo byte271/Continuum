@@ -1,0 +1,190 @@
+{
+  "continuum_version": "0.5.0a1",
+  "iterations": 60000,
+  "machine": "x86_64",
+  "measurement_scope": "single host; figures are not portable across operating systems, filesystems, or state sizes",
+  "processor": "x86_64",
+  "python_implementation": "CPython",
+  "python_version": "3.12.3",
+  "system": "Linux",
+  "workloads": {
+    "large-graph": {
+      "baseline": {
+        "overhead_microseconds_per_safe_point": 0.34960656351616676,
+        "overhead_seconds": 0.06349204800017105,
+        "safe_points_executed": 181610,
+        "with_scheduler_seconds": 0.6326910720001706,
+        "without_callback_seconds": 0.5691990239999996
+      },
+      "intervals": {
+        "0.1s": {
+          "bytes_written_total": 122397,
+          "checkpoints_committed": 7,
+          "coalesced_ticks": 0,
+          "commit_seconds": {
+            "count": 7,
+            "max": 0.02301044599994384,
+            "mean": 0.019047109428519043,
+            "median": 0.018120542999895406,
+            "min": 0.01626301000010244,
+            "p95": 0.02301044599994384
+          },
+          "failures": 0,
+          "image_bytes": {
+            "count": 7,
+            "max": 17490,
+            "mean": 17485.285714285714,
+            "median": 17485,
+            "min": 17481,
+            "p95": 17490
+          },
+          "instructions_executed": 1212457,
+          "pause_seconds": {
+            "count": 7,
+            "max": 0.022305452999944464,
+            "mean": 0.018305821999937116,
+            "median": 0.017500751999932618,
+            "min": 0.01551049099998636,
+            "p95": 0.022305452999944464
+          },
+          "recovery": {
+            "scan_and_validate_seconds": 0.005865336999931969,
+            "selected_generation": 7,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 0.1,
+          "safe_points_executed": 181610,
+          "wall_seconds": 0.7409711430000243,
+          "write_amplification": 6.999313775947847
+        },
+        "1.0s": {
+          "bytes_written_total": 0,
+          "checkpoints_committed": 0,
+          "coalesced_ticks": 0,
+          "commit_seconds": null,
+          "failures": 0,
+          "image_bytes": null,
+          "instructions_executed": 1212457,
+          "pause_seconds": null,
+          "recovery": {
+            "scan_and_validate_seconds": 0.0007610789998580003,
+            "selected_generation": null,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 1.0,
+          "safe_points_executed": 181610,
+          "wall_seconds": 0.5696814039999936,
+          "write_amplification": null
+        },
+        "5.0s": {
+          "bytes_written_total": 0,
+          "checkpoints_committed": 0,
+          "coalesced_ticks": 0,
+          "commit_seconds": null,
+          "failures": 0,
+          "image_bytes": null,
+          "instructions_executed": 1212457,
+          "pause_seconds": null,
+          "recovery": {
+            "scan_and_validate_seconds": 0.0007037529999252001,
+            "selected_generation": null,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 5.0,
+          "safe_points_executed": 181610,
+          "wall_seconds": 0.5973116109998955,
+          "write_amplification": null
+        }
+      }
+    },
+    "small-state": {
+      "baseline": {
+        "overhead_microseconds_per_safe_point": 0.0680614375224355,
+        "overhead_seconds": 0.012251330999788479,
+        "safe_points_executed": 180004,
+        "with_scheduler_seconds": 0.36247846799983563,
+        "without_callback_seconds": 0.35022713700004715
+      },
+      "intervals": {
+        "0.1s": {
+          "bytes_written_total": 24510,
+          "checkpoints_committed": 3,
+          "coalesced_ticks": 0,
+          "commit_seconds": {
+            "count": 3,
+            "max": 0.011261511999919094,
+            "mean": 0.010281487333259065,
+            "median": 0.010059310999849913,
+            "min": 0.009523639000008188,
+            "p95": 0.011261511999919094
+          },
+          "failures": 0,
+          "image_bytes": {
+            "count": 3,
+            "max": 8171,
+            "mean": 8170.0,
+            "median": 8170,
+            "min": 8169,
+            "p95": 8171
+          },
+          "instructions_executed": 960022,
+          "pause_seconds": {
+            "count": 3,
+            "max": 0.01038293600004181,
+            "mean": 0.009560498333333575,
+            "median": 0.009407333999888579,
+            "min": 0.008891225000070335,
+            "p95": 0.01038293600004181
+          },
+          "recovery": {
+            "scan_and_validate_seconds": 0.0026884789999712666,
+            "selected_generation": 3,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 0.1,
+          "safe_points_executed": 180004,
+          "wall_seconds": 0.397612368999944,
+          "write_amplification": 3.0
+        },
+        "1.0s": {
+          "bytes_written_total": 0,
+          "checkpoints_committed": 0,
+          "coalesced_ticks": 0,
+          "commit_seconds": null,
+          "failures": 0,
+          "image_bytes": null,
+          "instructions_executed": 960022,
+          "pause_seconds": null,
+          "recovery": {
+            "scan_and_validate_seconds": 0.0007230979999803822,
+            "selected_generation": null,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 1.0,
+          "safe_points_executed": 180004,
+          "wall_seconds": 0.38729584799989425,
+          "write_amplification": null
+        },
+        "5.0s": {
+          "bytes_written_total": 0,
+          "checkpoints_committed": 0,
+          "coalesced_ticks": 0,
+          "commit_seconds": null,
+          "failures": 0,
+          "image_bytes": null,
+          "instructions_executed": 960022,
+          "pause_seconds": null,
+          "recovery": {
+            "scan_and_validate_seconds": 0.0008269509999081492,
+            "selected_generation": null,
+            "slots_validated": 2
+          },
+          "requested_interval_seconds": 5.0,
+          "safe_points_executed": 180004,
+          "wall_seconds": 0.40011893099995177,
+          "write_amplification": null
+        }
+      }
+    }
+  }
+}

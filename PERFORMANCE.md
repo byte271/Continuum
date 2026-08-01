@@ -204,3 +204,43 @@ The later signal/Boolean change above removed request-path polling from idle
 safe points without changing checkpoint image contents.
 
 No native extension, JIT, or architecture-specific acceleration was added.
+
+## Rolling checkpoints
+
+Measured with `benchmarks/measure_checkpoints.py`. Raw JSON is in
+`benchmarks/results/checkpoints-linux-x86_64.json`.
+
+**These are Linux x86_64 figures from one host and do not transfer to macOS or
+Windows.** No macOS or Windows checkpoint benchmark has been run. The host was
+a 4-CPU Linux x86_64 container on an overlay filesystem, CPython 3.12.3,
+60000 loop iterations per workload.
+
+| Workload | State | Pause (median) | Pause (p95) | Commit (median) | Image | Recovery scan |
+| --- | --- | --- | --- | --- | --- | --- |
+| small-state | flat counters | 9.4 ms | 10.4 ms | 10.1 ms | 8.0 KiB | 2.7 ms |
+| large-graph | 400 rows, shared refs + cycle | 17.5 ms | 22.3 ms | 18.1 ms | 17.1 KiB | 5.9 ms |
+
+Scheduling overhead when checkpointing is enabled but no checkpoint is due --
+the cost paid at every safe point -- was **0.07 µs/safe-point** (small-state)
+and **0.35 µs/safe-point** (large-graph) over ~180000 safe points.
+
+*Pause* is the stop-the-world serialization time: the program is not running
+during it. It is reported separately from the requested interval on purpose,
+because the interval is a scheduling target and the pause is the actual cost.
+
+At a 100 ms requested interval both workloads kept up with **zero coalesced
+ticks**: the pause is 9-22% of the interval. A large enough heap will not keep
+up, at which point missed deadlines collapse into a single next checkpoint
+rather than queueing.
+
+**Write amplification is total, by design.** Every checkpoint writes a complete
+image, including any bundled read-only resources. Over the measured runs that
+was 24 KiB written for 3 commits (small-state) and 120 KiB for 7 commits
+(large-graph) -- 3.0x and 7.0x the size of one image. Sustained 100 ms
+checkpointing of a large bundled workload will write a lot; there is no
+incremental format, and `LIMITATIONS.md` explains why shared blobs between slots
+were rejected.
+
+The 1 s and 5 s intervals committed zero checkpoints in these runs because the
+workloads finish sooner. That is reported rather than hidden; a longer workload
+is needed to characterise those intervals.

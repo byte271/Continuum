@@ -102,6 +102,48 @@ process exits normally. A partial image is never reported as successful.
 If capture fails, the VM is left live. Request/response control files are
 removed by the client so a corrected retry can succeed.
 
+## Rolling checkpoints
+
+`continuum/checkpoint.py` adds a second way to reach the same writer. It shares
+`image.save_image` and `image.load_image` with the freeze path, so there is one
+writer, one integrity implementation, and one loader.
+
+**Where the capture happens.** The VM emits `SAFEPOINT`, which advances
+`frame.pc` and *then* calls the safe-point callback. By the time the callback
+runs, the program counter already points at the next logical instruction, so an
+image captured there resumes without re-executing the safe point. This is the
+same property the freeze path relies on; the only difference is that the
+checkpoint path returns normally instead of raising `FrozenExecution`.
+
+**Why there are no threads.** The capture runs synchronously inside that
+callback, so the VM is stopped for the whole serialization. That makes several
+hostile requirements structural rather than defended:
+
+- no thread can observe mutable VM state while it is being mutated, because no
+  other thread exists;
+- two checkpoints can never overlap, because the call is synchronous;
+- there is no worker to leak, no daemon thread that can vanish mid-commit, and
+  no queue that can grow without bound;
+- stopping the scheduler cannot interrupt a commit, because control only
+  reaches `stop()` when no commit is in progress.
+
+The cost is a visible stop-the-world pause. It is measured and reported
+separately from the requested interval (`PERFORMANCE.md`) rather than hidden
+inside it. A lower-pause design -- snapshot-then-serialize -- would trade this
+for copy cost and a much larger correctness argument, and was not attempted.
+
+**Separation of concerns.** `CheckpointStore` owns the directory: slot choice,
+the durable commit sequence, validation, and selection. `CheckpointScheduler`
+owns *when*, and holds the status the CLI reports. `SessionController` merely
+forwards safe points to the scheduler; a checkpoint never produces a freeze
+response, never sets session status to `frozen`, and never terminates.
+
+**What recovery trusts.** Only the container. `generation` and `lineage_id`
+live in `manifest.json`, which `checksums.json` covers, so a forged generation
+fails the ordinary integrity check before selection ever reads it. Filenames,
+mtimes, directory order, file size, and any external pointer file are
+deliberately not inputs to the decision.
+
 ## Why not CPython frames
 
 In CPython 3.11 and later, `PyFrameObject` members are no longer public C API.

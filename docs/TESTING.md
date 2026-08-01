@@ -58,7 +58,7 @@ $env:PYTHONPATH = "."; python benchmarks\measure.py `
   --iterations 10000 --repetitions 5
 ```
 
-The suite discovers 420 tests on every host. Skips are explicit and
+The suite discovers 484 tests on every host. Skips are explicit and
 mechanism-bound rather than platform exclusions:
 
 | Host | Skipped |
@@ -100,3 +100,28 @@ repository. Adding one is a separate milestone in `ROADMAP.md`.
 Passing only manifest checks, containers, emulation, mocked platform strings,
 or this Linux dry run does not satisfy cross-platform acceptance. Neither does
 passing this suite natively on a host: that is same-host evidence.
+
+## Rolling checkpoint tests
+
+Four modules, 64 checkpoint tests in total:
+
+| Module | Covers |
+| --- | --- |
+| `test_checkpoint_store.py` | interval and slot parsing, rotation, generation monotonicity, selection that ignores timestamps, corruption fallback, lineage isolation, durability contract, scheduler coalescing and failure policy, non-terminating execution |
+| `test_checkpoint_crash_injection.py` | a real raised failure at each of the seven commit stages, at first-commit and steady state, plus a genuine mid-serialization failure |
+| `test_checkpoint_cli.py` | new commands, JSON output, and that no pre-existing `run` invocation changes meaning |
+| `test_checkpoint_process_crash.py` | end-to-end: a real process is `SIGKILL`ed (`Popen.kill()` on Windows), confirmed dead, and recovered in a separate process |
+
+The crash-injection tests do not mock success. Each raises a real exception at
+one commit stage, leaves whatever partial state that produces, and then reads
+the directory back through the ordinary image reader. The invariant asserted
+after every injection is the same: recovery selects the last fully committed
+generation or the newly committed one, never a partial file.
+
+`test_checkpoint_process_crash.py` writes child output to files rather than
+pipes. The workload outpaces any reader, and a full pipe would block the child
+mid-run, stalling the very checkpoints under test. Its barrier polls committed
+on-disk state rather than sleeping a fixed time.
+
+These tests need a verified interpreter (3.12.13 or 3.13.14) because they drive
+`continuum run` and `restore_vm`, which refuse unverified interpreters.

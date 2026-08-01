@@ -45,6 +45,50 @@ resources/files/<resource-id>.bin
 `frames/frames.json` is inspectable metadata. The authoritative restorable
 state is the graph rooted in `heap/objects.json`.
 
+### Optional `checkpoint` block
+
+Images written by the rolling checkpoint writer carry one additional manifest
+key. It is **optional**: manual `freeze` images and every image written before
+this feature omit it entirely, and a reader that finds it absent must treat the
+image as an ordinary image rather than as malformed.
+
+```json
+"checkpoint": {
+  "checkpoint_format_version": "1",
+  "mode": "periodic",
+  "lineage_id": "cont-4e39c4f752d1",
+  "generation": 7,
+  "previous_generation": 6,
+  "created_at": "2026-08-01T18:41:07.221845+00:00",
+  "requested_interval_seconds": 0.1,
+  "durability": {"file_fsync": true, "directory_fsync": "supported"}
+}
+```
+
+Three deliberate decisions:
+
+- **No new archive entry.** The block lives in `manifest.json`, which
+  `checksums.json` already covers, so `generation` and `lineage_id` are
+  authenticated by the container's existing integrity check. Recovery selects
+  between slots using these fields, so they must not be forgeable without
+  breaking the checksum. A separate metadata file outside the container would
+  have been trusted input, which is exactly what this avoids.
+- **No format-version bump and no new capability.** The block is provenance
+  only and never affects the restore decision, so a runtime that predates it
+  restores a checkpoint image correctly by ignoring it. Bumping
+  `format_version` would have wrongly refused these images on older runtimes
+  that can in fact read them.
+- **Versioned, not free-form.** `checkpoint_format_version` is checked
+  exactly; an unknown value is refused rather than partially interpreted, so a
+  future revision cannot be silently misread by this runtime.
+
+When present the block is structurally validated on both write and read:
+`generation` must be a positive integer (and `True` does not qualify),
+`previous_generation` must be `null` or strictly less than `generation`,
+`lineage_id` must be a bounded alphanumeric token, `requested_interval_seconds`
+must be in range, and `directory_fsync` must be one of the two known states.
+A malformed block makes the whole image invalid.
+
 ## IR
 
 `code/ir.json` contains named function blocks and instructions. Control-flow

@@ -125,3 +125,73 @@ statement being changed.
 
 Migration is verified for one workload, one platform pair, and the revision
 pairs in `validation/live_migration/`. It is not a general hot-reload facility.
+
+## Rolling crash-recovery checkpoints
+
+These are six different things. Do not read a claim about one as a claim about
+another:
+
+1. **Manual terminating freeze** (`continuum freeze`) -- commits one image and
+   the source process exits. Unchanged by this feature.
+2. **Non-terminating periodic checkpoint** (`continuum run --checkpoint-dir`)
+   -- commits an image at a safe point and the same process keeps running.
+3. **Crash recovery** (`continuum recover`) -- resumes the newest valid
+   checkpoint after the process died.
+4. **Cross-machine migration** -- moving an image to another host.
+5. **Cross-Python continuation** -- restoring under a different verified
+   interpreter.
+6. **Live source-code migration** -- resuming into edited source.
+
+A checkpoint image is an ordinary image, so 4 and 5 are *format*-compatible
+with it. That is not the same as having been proven: no checkpoint image has
+been moved between hosts and resumed by a proof workflow, so **cross-platform
+rolling recovery is not claimed**.
+
+**How much progress a crash can cost.** At most one checkpoint interval of
+execution, plus the time to reach the next safe point, plus commit time. Work
+performed after the last committed generation is re-executed on recovery. This
+is visible and expected: in the end-to-end test the recovered process re-emits
+the markers produced between the last commit and the kill.
+
+**The newest checkpoint can be lost; an older one should remain.** If the
+process dies mid-commit, the temporary file is discarded and the previously
+committed generation is selected. Two slots exist precisely so the newest
+committed checkpoint is never the file being overwritten.
+
+**Power-loss durability is conditional, not absolute.** Contents are flushed
+before the atomic replace, and the directory entry is flushed after it *where
+the platform supports that*. On POSIX the directory flush is performed and a
+genuine I/O error fails the commit rather than being ignored; an
+`EINVAL`/`ENOTSUP` answer is recorded as the weaker
+`directory_fsync: "unsupported-on-platform"` state instead of being treated as
+success. **On Windows there is no directory-entry flush**, so a power cut can
+in principle lose the rename that publishes the newest generation even though
+its contents reached storage; the previous generation remains. Beyond that,
+durability depends on the filesystem and on the drive honouring flushes, which
+Continuum cannot verify. **No power-loss testing on real hardware has been
+performed.** The crash tests kill processes; they do not cut power.
+
+**External side effects are not exactly-once.** Recovery re-executes the window
+between the last checkpoint and the crash. Anything that window did outside the
+controlled runtime -- network requests, database writes, messages, payments,
+writes to unsupported external files -- can happen a second time. Continuum's
+anti-replay guarantees apply to the controlled proof workload and its external
+auditor, not to arbitrary external systems. True exactly-once effects require
+idempotency keys, transactional integration, or an external auditor.
+
+**Writable files remain unsupported.** Checkpointing does not broaden the
+resource model: read-only regular files under strict, relocate, and bundle
+policies are what is supported, exactly as before.
+
+**Every checkpoint writes a full image.** Bundled read-only resources are
+re-copied into every generation. At 100 ms this is real write amplification;
+`PERFORMANCE.md` has measured figures. No incremental or shared-blob format is
+implemented, deliberately: an external blob reference shared between slots
+would break the property that each slot is independently valid.
+
+**100 ms is a request, not a promise.** Whether it is achievable depends on
+state size, host, and filesystem. On the measured Linux host a small-state
+workload paused ~9 ms per checkpoint and a larger object graph ~18 ms, so 100 ms
+was comfortably met; a large enough heap will not meet it. When a commit
+overruns the interval the scheduler coalesces the missed deadlines into one
+rather than queueing them.

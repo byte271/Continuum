@@ -22,5 +22,9 @@ class ResourceError(ContinuumError):
     """A resource cannot be rebound without changing program meaning."""
 
 
+class CheckpointError(ContinuumError):
+    """A rolling checkpoint could not be committed, scanned, or recovered."""
+
+
 class FrozenExecution(BaseException):
     """Internal non-error used only after an image is durably committed."""

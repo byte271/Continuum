@@ -142,6 +142,7 @@ class SessionController:
         # budget is spent across safe points, never inside one.
         self._request_unreadable_since: float | None = None
         self._previous_signal_handler: Any = None
+        self._checkpoints: Any = None
         self.record = {
             "session_id": self.session_id,
             "pid": os.getpid(),
@@ -170,7 +171,26 @@ class SessionController:
         self.record["status"] = "running"
         self._write_record()
 
+    def attach_checkpoints(self, scheduler: Any) -> None:
+        """Attach a rolling checkpoint scheduler to this session.
+
+        Kept separate from the freeze protocol on purpose: a checkpoint never
+        produces a freeze response, never changes session status to `frozen`,
+        and never raises FrozenExecution. The two mechanisms share only the
+        safe point they observe.
+        """
+
+        self._checkpoints = scheduler
+        self.record["checkpoint_directory"] = scheduler.status.directory
+        self.record["checkpoint_lineage_id"] = scheduler.lineage_id
+        self._write_record()
+
     def on_safe_point(self, vm: Any) -> None:
+        checkpoints = getattr(self, "_checkpoints", None)
+        if checkpoints is not None:
+            # Runs before the freeze check so a pending freeze cannot starve
+            # checkpointing, and returns normally so execution continues.
+            checkpoints.on_safe_point(vm)
         if not self.freeze_requested:
             if self._signal_notifications:
                 return
