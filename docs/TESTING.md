@@ -58,7 +58,7 @@ $env:PYTHONPATH = "."; python benchmarks\measure.py `
   --iterations 10000 --repetitions 5
 ```
 
-The suite discovers 402 tests on every host. Skips are explicit and
+The suite discovers 407 tests on every host. Skips are explicit and
 mechanism-bound rather than platform exclusions:
 
 | Host | Skipped |
@@ -67,9 +67,14 @@ mechanism-bound rather than platform exclusions:
 | macOS arm64 | native Apple Silicon test, unless `CONTINUUM_LINUX_IMAGE` supplies a qualified Linux image |
 | Windows x86_64 | native Apple Silicon test, two POSIX signal-notification tests, the POSIX shell-installer test, the POSIX symlink-launcher test |
 
-Raw untouched-baseline and final proof logs are under `artifacts/`; corpus and
-benchmark samples are under their respective `results/` directories. The
-published corpus and benchmark numbers are Linux x86_64 measurements.
+On every host the static undefined-name gate also skips unless `pylint` is
+importable. It is not a runtime dependency; the stress workflow installs it, so
+that job is the one where the gate actually runs.
+
+Corpus and benchmark samples are under their respective `results/` directories.
+The published corpus and benchmark numbers are Linux x86_64 measurements. Raw
+untouched-baseline and final proof logs are attached to the Actions runs cited
+in STATUS.md rather than committed to the tree.
 
 ## Real cross-platform protocol
 

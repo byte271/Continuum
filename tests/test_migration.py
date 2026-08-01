@@ -16,6 +16,7 @@ import json
 import tempfile
 import unittest
 import unittest.mock
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -561,7 +562,12 @@ class PlanIntegrityTests(MigrationCase):
         with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
             for entry, content in sorted(entries.items()):
                 archive.writestr(entry, content)
-            archive.writestr("plan.json", entries["plan.json"])
+            # Writing the name twice is the point of the fixture, and CPython
+            # warns about it. Scoped here so the warning cannot be mistaken for
+            # one the runtime emitted, and so a real warning still stands out.
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                archive.writestr("plan.json", entries["plan.json"])
         with self.assertRaises(MigrationRefused) as caught:
             migration.read_plan(target)
         self.assertEqual(caught.exception.reason, migration.REFUSE_PLAN_TAMPERED)

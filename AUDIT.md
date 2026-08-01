@@ -36,8 +36,8 @@ reported:
 continuum: error: Expecting value: line 1 column 1 (char 0)
 ```
 
-The raw environment and output are stored in
-`artifacts/baseline/linux-x86_64-python3.12.13.txt`. The race was fixed by
+The failure text above is the retained record; the raw baseline log was never
+committed to this tree. The race was fixed by
 fully writing and fsyncing a hidden same-directory file, then atomically
 publishing it with a no-clobber hard link. The integration test passed five
 consecutive runs after the fix.

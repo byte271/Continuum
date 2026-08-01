@@ -12,7 +12,7 @@ the edit. Verified simultaneously across operating system, architecture, Python
 version, and source revision.
 
 [Actions run 30682958879](https://github.com/byte271/Continuum/actions/runs/30682958879),
-evaluated on merge commit `d328397`:
+evaluated on GitHub's pull-request merge commit `d328397`, which is generated per run and is not reachable from any branch in this repository:
 
 | Property | Result |
 | --- | --- |
@@ -91,7 +91,7 @@ them by a different rule.
 
 **Accepted-migration correctness: 100%.**
 
-402 tests green on CPython 3.12.13 and 3.13.14.
+407 tests green on CPython 3.12.13 and 3.13.14.
 
 ## A bug the sweep found
 
