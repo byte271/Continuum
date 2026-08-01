@@ -74,15 +74,24 @@ Differential matrix, every applicable safe point, 8 revision pairs, 1,576 cases
 | Outcome | Cases |
 | --- | ---: |
 | Accepted and correct | 590 |
+| Accepted; the damaged element was not yet live | 26 |
 | Correctly refused | 959 |
 | Refused, narrower than hoped | 1 |
 | **Silent incorrect migrations** | **0** |
 | **Ambiguous migrations accepted** | **0** |
 | Infrastructure failures | 0 |
+| **Total** | **1,576** |
+
+The 26 accepted cases in the second row come from pairs labelled "refuse".
+Such a pair is only required to refuse where the element it damages is
+actually live: deleting `middle` before `middle` has ever been called is an
+inactive-function edit, and accepting it is correct. They are listed
+separately rather than folded into the first row because the oracle judges
+them by a different rule.
 
 **Accepted-migration correctness: 100%.**
 
-369 tests green on CPython 3.12.13 and 3.13.14.
+402 tests green on CPython 3.12.13 and 3.13.14.
 
 ## A bug the sweep found
 

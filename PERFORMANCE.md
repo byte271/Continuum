@@ -1,6 +1,12 @@
 # Performance
 
-## Current measurements (0.4.0a1, IR 0.4, execution ABI 1.0, plan format 1.0)
+## Current measurements (0.5.0a1, IR 0.4, execution ABI 1.0, plan format 1.0)
+
+The migration figures below measure `plan-upgrade`, `verify-upgrade`, and
+`resume --upgrade`, which are 0.5.0a1 features. The recorded
+`continuum_version` inside the raw result files reads `0.4.0a1`, because the
+benchmarks were taken before the version bump; the code measured is the code
+in this release.
 
 Measured 2026-07-31 on one Linux x86_64 host with
 `benchmarks/measure_migration.py`, 20,000 workload iterations, 7 repetitions,
