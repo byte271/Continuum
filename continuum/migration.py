@@ -676,6 +676,68 @@ def write_plan(path: str | os.PathLike[str], plan: dict[str, Any], new_source: s
 MAX_PLAN_ENTRIES = 64
 MAX_PLAN_ENTRY_BYTES = 64 * 1024 * 1024
 MAX_PLAN_RATIO = 500
+PLAN_READ_CHUNK_BYTES = 1024 * 1024
+
+
+def _read_bounded(archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
+    """Read one entry, bounding the decompressed bytes actually produced.
+
+    `file_size` and `compress_size` are archive metadata that a hostile plan
+    controls, so the caller's checks against them are a cheap first filter, not
+    the guarantee. CPython's `zipfile` happens to stop decompressing at the
+    declared `file_size`, but that is an implementation detail of one reader;
+    the limit enforced here is on bytes this function has actually seen, so the
+    bound holds regardless.
+
+    Decompression failures are refusals. A truncated member, a wrong CRC, or an
+    unsupported compression method all mean the same thing to a caller: this is
+    not a plan that can be proven safe.
+    """
+
+    chunks: list[bytes] = []
+    produced = 0
+    try:
+        with archive.open(info, "r") as stream:
+            while True:
+                chunk = stream.read(PLAN_READ_CHUNK_BYTES)
+                if not chunk:
+                    break
+                produced += len(chunk)
+                if produced > MAX_PLAN_ENTRY_BYTES:
+                    raise MigrationRefused(
+                        REFUSE_MALFORMED_PLAN,
+                        info.filename,
+                        "entry expands beyond the permitted size",
+                    )
+                chunks.append(chunk)
+    except (OSError, EOFError, zipfile.BadZipFile, NotImplementedError) as exc:
+        raise MigrationRefused(
+            REFUSE_PLAN_TAMPERED, info.filename, f"entry cannot be read: {exc}"
+        ) from exc
+    return b"".join(chunks)
+
+
+def _plan_json(raw: bytes, entry: str) -> dict[str, Any]:
+    """Parse one archive entry as a JSON object, refusing anything else.
+
+    Every byte here is untrusted. A parse failure is a refusal, not a
+    traceback, so callers that classify outcomes see a refusal rather than an
+    infrastructure fault.
+    """
+
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise MigrationRefused(
+            REFUSE_MALFORMED_PLAN, entry, f"entry is not valid JSON: {exc}"
+        ) from exc
+    if not isinstance(decoded, dict):
+        raise MigrationRefused(
+            REFUSE_MALFORMED_PLAN,
+            entry,
+            f"entry is a JSON {type(decoded).__name__}, expected an object",
+        )
+    return decoded
 
 
 def read_plan(path: str | os.PathLike[str]) -> tuple[dict[str, Any], str, dict[str, Any]]:
@@ -718,21 +780,31 @@ def read_plan(path: str | os.PathLike[str]) -> tuple[dict[str, Any], str, dict[s
                     info.filename,
                     "entry compression ratio is implausible",
                 )
-        raw = {info.filename: archive.read(info) for info in infos}
+        raw = {info.filename: _read_bounded(archive, info) for info in infos}
 
-    checksums = json.loads(raw["checksums.json"])
-    for name, expected in sorted(checksums["entries"].items()):
+    checksums = _plan_json(raw["checksums.json"], "checksums.json")
+    entries = checksums.get("entries")
+    if not isinstance(entries, dict) or not all(
+        isinstance(name, str) and isinstance(digest, str)
+        for name, digest in entries.items()
+    ):
+        raise MigrationRefused(
+            REFUSE_MALFORMED_PLAN,
+            "checksums.json",
+            "entries must be a mapping of entry name to hexadecimal digest",
+        )
+    for name, expected in sorted(entries.items()):
         if name not in raw or _sha256(raw[name]) != expected:
             raise MigrationRefused(
                 REFUSE_PLAN_TAMPERED, name, "plan entry checksum does not match"
             )
-    covered = set(checksums["entries"])
+    covered = set(entries)
     if covered != set(PLAN_ENTRIES) - {"checksums.json"}:
         raise MigrationRefused(
             REFUSE_PLAN_TAMPERED, "checksums.json", "checksum coverage is incomplete"
         )
 
-    plan = json.loads(raw["plan.json"])
+    plan = _plan_json(raw["plan.json"], "plan.json")
     if plan.get("plan_format_version") != PLAN_FORMAT_VERSION:
         raise MigrationRefused(
             REFUSE_UNKNOWN_PLAN_VERSION,
@@ -745,8 +817,13 @@ def read_plan(path: str | os.PathLike[str]) -> tuple[dict[str, Any], str, dict[s
             "plan.json",
             f"plan requires execution ABI {plan.get('execution_abi_version')!r}",
         )
-    new_source = raw["new_source.py"].decode("utf-8")
-    new_ir = json.loads(raw["new_ir.json"])
+    try:
+        new_source = raw["new_source.py"].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise MigrationRefused(
+            REFUSE_MALFORMED_PLAN, "new_source.py", f"source is not UTF-8: {exc}"
+        ) from exc
+    new_ir = _plan_json(raw["new_ir.json"], "new_ir.json")
     if _sha256(raw["new_source.py"]) != plan.get("new_source_sha256"):
         raise MigrationRefused(
             REFUSE_SOURCE_HASH_MISMATCH, "new_source.py", "new source hash mismatch"
@@ -827,6 +904,10 @@ def apply_plan(vm: Any, plan: dict[str, Any], new_ir: dict[str, Any]) -> None:
             f"plan maps {len(mappings)} frames, the image restored "
             f"{len(vm.frames)}",
         )
+
+    # Every frame is checked against the plan before any frame is written to.
+    # A refusal discovered at depth 2 must not leave depths 0 and 1 already
+    # moved onto the new revision: migration is total or it does not happen.
     for depth, frame in enumerate(vm.frames):
         mapping = mappings.get(depth)
         if mapping is None or mapping["old_ir_function_id"] != frame.function_id:
@@ -841,9 +922,20 @@ def apply_plan(vm: Any, plan: dict[str, Any], new_ir: dict[str, Any]) -> None:
                 f"frame {depth}",
                 "plan was built for a different resume position",
             )
+        mapped_blocks = mapping["control_blocks"]
+        if len(mapped_blocks) != len(frame.blocks):
+            raise MigrationRefused(
+                REFUSE_MALFORMED_PLAN,
+                f"frame {depth}",
+                f"plan maps {len(mapped_blocks)} control blocks, the image "
+                f"restored {len(frame.blocks)}",
+            )
+
+    for depth, frame in enumerate(vm.frames):
+        mapping = mappings[depth]
         frame.function_id = mapping["new_ir_function_id"]
         frame.pc = mapping["new_pc"]
-        for block, mapped in zip(frame.blocks, mapping["control_blocks"]):
+        for block, mapped in zip(frame.blocks, mapping["control_blocks"], strict=True):
             block["target"] = mapped["new_target"]
     _rewrite_live_identifiers(vm, plan)
     vm.ir = new_ir
@@ -874,9 +966,11 @@ def _rewrite_live_identifiers(vm: Any, plan: dict[str, Any]) -> None:
         mapping["old_ir_class_id"]: mapping["new_ir_class_id"]
         for mapping in plan.get("class_mappings", [])
     }
-    if not functions and not classes:
-        return
 
+    # The walk runs even when both tables are empty. An empty table is not
+    # evidence that nothing needs remapping -- it is exactly the state in which
+    # a reachable FunctionValue would keep an old-revision identifier against
+    # the new IR, so the walk still has to prove no such value exists.
     seen: set[int] = set()
 
     def walk(value: Any) -> None:

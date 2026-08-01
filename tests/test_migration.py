@@ -15,6 +15,7 @@ import io
 import json
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -590,6 +591,152 @@ class PlanIntegrityTests(MigrationCase):
         self.assertEqual(caught.exception.reason, migration.REFUSE_MALFORMED_PLAN)
 
 
+class MalformedPlanContentTests(MigrationCase):
+    """Unparseable plan content is a refusal, never a raw parsing error.
+
+    Every byte read out of a plan archive is untrusted. When a parse failure
+    escapes as `JSONDecodeError`, `KeyError`, `TypeError`, or
+    `UnicodeDecodeError`, callers that classify outcomes see an infrastructure
+    fault instead of a refusal -- `validation/live_migration/matrix.py` counts
+    exactly that difference, so the distinction changes the reported evidence.
+    """
+
+    def make_plan(self, name):
+        plan = self.plan_for(REVISION_B, "malformed.py")
+        path = self.root / name
+        migration.write_plan(
+            path, plan, REVISION_B, compile_source(REVISION_B, "prog.py")
+        )
+        return path
+
+    def rebuild(self, name, mutate, *, fix_checksums=True):
+        path = self.make_plan(f"{name}.cup")
+        with zipfile.ZipFile(path, "r") as archive:
+            entries = {n: archive.read(n) for n in archive.namelist()}
+        mutate(entries)
+        if fix_checksums:
+            entries["checksums.json"] = json.dumps(
+                {
+                    "algorithm": "sha256",
+                    "entries": {
+                        n: migration._sha256(c)
+                        for n, c in sorted(entries.items())
+                        if n != "checksums.json"
+                    },
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        target = self.root / f"{name}-out.cup"
+        with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as archive:
+            for entry, content in sorted(entries.items()):
+                archive.writestr(entry, content)
+        return target
+
+    def assert_refused(self, target, reason=None):
+        with self.assertRaises(MigrationRefused) as caught:
+            migration.read_plan(target)
+        if reason is not None:
+            self.assertEqual(caught.exception.reason, reason)
+        return caught.exception
+
+    def test_a_truncated_plan_document_is_refused(self):
+        def mutate(entries):
+            entries["plan.json"] = entries["plan.json"][: len(entries["plan.json"]) // 2]
+
+        self.assert_refused(
+            self.rebuild("truncated", mutate), migration.REFUSE_MALFORMED_PLAN
+        )
+
+    def test_a_plan_document_that_is_not_an_object_is_refused(self):
+        def mutate(entries):
+            entries["plan.json"] = b"[1, 2, 3]"
+
+        self.assert_refused(
+            self.rebuild("notobject", mutate), migration.REFUSE_MALFORMED_PLAN
+        )
+
+    def test_a_checksums_document_without_entries_is_refused(self):
+        def mutate(entries):
+            entries["checksums.json"] = b'{"algorithm":"sha256"}'
+
+        self.assert_refused(
+            self.rebuild("noentries", mutate, fix_checksums=False),
+            migration.REFUSE_MALFORMED_PLAN,
+        )
+
+    def test_a_checksums_entries_mapping_of_the_wrong_shape_is_refused(self):
+        def mutate(entries):
+            entries["checksums.json"] = b'{"algorithm":"sha256","entries":{"a":7}}'
+
+        self.assert_refused(
+            self.rebuild("badentries", mutate, fix_checksums=False),
+            migration.REFUSE_MALFORMED_PLAN,
+        )
+
+    def test_a_checksums_document_that_is_not_json_is_refused(self):
+        def mutate(entries):
+            entries["checksums.json"] = b"\xff\xfe not json"
+
+        self.assert_refused(
+            self.rebuild("badchecksums", mutate, fix_checksums=False),
+            migration.REFUSE_MALFORMED_PLAN,
+        )
+
+    def test_non_utf8_new_source_is_refused(self):
+        def mutate(entries):
+            entries["new_source.py"] = b"\xff\xfe\x00invalid"
+
+        self.assert_refused(
+            self.rebuild("badsource", mutate), migration.REFUSE_MALFORMED_PLAN
+        )
+
+    def test_an_unparseable_new_ir_document_is_refused(self):
+        def mutate(entries):
+            entries["new_ir.json"] = b"{not json"
+
+        self.assert_refused(
+            self.rebuild("badir", mutate), migration.REFUSE_MALFORMED_PLAN
+        )
+
+    def test_a_corrupt_member_crc_is_refused(self):
+        """A bad CRC surfaces from the read, not from opening the archive.
+
+        `read_plan` only guards the `ZipFile` constructor, so before this was
+        fixed a member whose bytes no longer matched its recorded CRC escaped
+        as a raw `zipfile.BadZipFile` from the read loop instead of a refusal.
+        """
+
+        path = self.make_plan("crc.cup")
+        with zipfile.ZipFile(path, "r") as archive:
+            entries = {n: archive.read(n) for n in archive.namelist()}
+        # Store the members uncompressed so a single flipped payload byte
+        # invalidates the recorded CRC without disturbing the archive layout.
+        stored = self.root / "crc-stored.cup"
+        with zipfile.ZipFile(stored, "w", zipfile.ZIP_STORED) as archive:
+            for entry, content in sorted(entries.items()):
+                archive.writestr(entry, content)
+        raw = bytearray(stored.read_bytes())
+        marker = raw.find(b"plan_format_version")
+        self.assertNotEqual(marker, -1, "plan.json should be stored uncompressed")
+        raw[marker] ^= 0xFF
+        target = self.root / "crc-out.cup"
+        target.write_bytes(bytes(raw))
+        self.assert_refused(target, migration.REFUSE_PLAN_TAMPERED)
+
+    def test_the_read_bound_is_enforced_on_produced_bytes(self):
+        """The bound holds on bytes actually decompressed, not declared sizes."""
+
+        path = self.make_plan("bound.cup")
+        with zipfile.ZipFile(path, "r") as archive:
+            info = archive.getinfo("plan.json")
+            self.assertGreater(info.file_size, 16)
+            with unittest.mock.patch.object(migration, "MAX_PLAN_ENTRY_BYTES", 16):
+                with self.assertRaises(MigrationRefused) as caught:
+                    migration._read_bounded(archive, info)
+        self.assertEqual(caught.exception.reason, migration.REFUSE_MALFORMED_PLAN)
+
+
 class PlanContentTests(MigrationCase):
     def test_the_plan_records_every_required_field(self):
         plan = self.plan_for(REVISION_B, "fields.py")
@@ -629,10 +776,6 @@ class PlanContentTests(MigrationCase):
         self.assertTrue(
             any("Completed effects" in item for item in plan["assumptions"])
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class LiveIdentifierRewriteTests(MigrationCase):
@@ -743,3 +886,125 @@ class LiveIdentifierRewriteTests(MigrationCase):
         self.assertEqual(
             len([l for l in output.splitlines() if l.startswith("ACTION")]), 30
         )
+
+
+class ApplyPlanShapeTests(MigrationCase):
+    """`apply_plan` is a public entry point and may run without `verify_plan`.
+
+    It therefore has to validate the plan shape it depends on rather than
+    assume a verifier ran first. Anything it does not validate becomes silent
+    corruption once `vm.ir` is replaced wholesale.
+    """
+
+    def stored_plan(self, name="shape"):
+        plan = self.plan_for(REVISION_B, f"{name}.py")
+        path = self.root / f"{name}.cup"
+        migration.write_plan(
+            path, plan, REVISION_B, compile_source(REVISION_B, "prog.py")
+        )
+        return migration.read_plan(path)
+
+    def blocked_frame_plan(self):
+        """A second fixture whose frame really carries a control block.
+
+        The shared fixture pauses inside a bare `while`, which pushes no block,
+        so it cannot exercise a short block list at all. This one pauses inside
+        a `try`, so the restored frame holds a live `finally` block whose target
+        is an instruction index into the old revision's IR.
+        """
+
+        source_a = (
+            "def work(limit):\n"
+            "    total = 0\n"
+            "    index = 0\n"
+            "    try:\n"
+            "        while index < limit:\n"
+            '            print(f"ACTION {index}")\n'
+            "            total = total + index\n"
+            "            index += 1\n"
+            "    finally:\n"
+            '        print(f"DONE {total}")\n'
+            "    return total\n"
+            "\n"
+            "result = work(20)\n"
+        )
+        source_b = source_a.replace(
+            '            print(f"ACTION {index}")\n',
+            '            print(f"ACTION {index}")\n            print("EXTRA")\n',
+        )
+        image = self.root / "blocked.cont"
+        vm = VirtualMachine(compile_source(source_a, "prog.py"), ["prog.py"], "prog.py")
+        with contextlib.redirect_stdout(io.StringIO()):
+            while vm.frames and vm.safe_points_executed < 12:
+                vm.step()
+        save_image(image, vm, source_a)
+        candidate = self.root / "blocked_b.py"
+        candidate.write_text(source_b, encoding="utf-8")
+        plan = migration.plan_upgrade(image, candidate)
+        path = self.root / "blocked.cup"
+        migration.write_plan(
+            path, plan, source_b, compile_source(source_b, "prog.py")
+        )
+        return image, migration.read_plan(path)
+
+    def test_a_short_control_block_list_is_refused(self):
+        """Truncated control blocks would leave old targets against new IR."""
+
+        image, (stored, _source, new_ir) = self.blocked_frame_plan()
+        carrying = [
+            mapping
+            for mapping in stored["frame_mappings"]
+            if mapping["control_blocks"]
+        ]
+        self.assertTrue(carrying, "the fixture no longer maps any control block")
+        carrying[0]["control_blocks"] = carrying[0]["control_blocks"][:-1]
+        vm = load_image(image).restore_vm()
+        with self.assertRaises(MigrationRefused) as caught:
+            migration.apply_plan(vm, stored, new_ir)
+        self.assertEqual(caught.exception.reason, migration.REFUSE_MALFORMED_PLAN)
+
+    def test_a_mapped_control_block_moves_the_live_target(self):
+        """The accepted path the length check protects: the target really moves."""
+
+        image, (stored, _source, new_ir) = self.blocked_frame_plan()
+        vm = load_image(image).restore_vm()
+        before = [dict(block) for frame in vm.frames for block in frame.blocks]
+        self.assertTrue(before, "the fixture no longer restores a control block")
+        migration.apply_plan(vm, stored, new_ir)
+        after = [dict(block) for frame in vm.frames for block in frame.blocks]
+        self.assertNotEqual(
+            [block["target"] for block in before],
+            [block["target"] for block in after],
+            "inserting a statement inside the try should move the finally target",
+        )
+
+    def test_a_refusal_leaves_no_frame_partially_migrated(self):
+        """Validation completes before the first frame is written to."""
+
+        stored, _source, new_ir = self.stored_plan("partial")
+        # Break the deepest frame only. The shallower frames are still valid,
+        # so a validate-as-you-go implementation would move them first.
+        stored["frame_mappings"][-1]["old_pc"] += 1
+        vm = load_image(self.image).restore_vm()
+        before = [(frame.function_id, frame.pc) for frame in vm.frames]
+        with self.assertRaises(MigrationRefused):
+            migration.apply_plan(vm, stored, new_ir)
+        after = [(frame.function_id, frame.pc) for frame in vm.frames]
+        self.assertEqual(before, after)
+
+    def test_an_empty_identifier_table_still_proves_no_live_function_is_stale(self):
+        """An empty mapping is not evidence that nothing needed remapping."""
+
+        stored, _source, new_ir = self.stored_plan("empty")
+        stored["function_id_mappings"] = {}
+        stored["class_mappings"] = []
+        vm = load_image(self.image).restore_vm()
+        with self.assertRaises(MigrationRefused) as caught:
+            migration.apply_plan(vm, stored, new_ir)
+        self.assertEqual(
+            caught.exception.reason, migration.REFUSE_LIVE_FUNCTION_MISSING
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
