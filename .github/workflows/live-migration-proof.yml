@@ -73,13 +73,15 @@ jobs:
           set -Eeuo pipefail
           PYTHONPATH=. "$PYBIN" -m unittest discover -s tests
 
-      - name: Confirm revision B is not present in the source job
+      - name: Record the revision B digest before the freeze
         shell: bash
         run: |
           set -Eeuo pipefail
           # The image must be created before the new revision is introduced.
-          # Revision B exists in the tree, but the source job never reads it;
-          # this records that its content played no part in the freeze.
+          # Revision B exists in the tree, so this cannot assert its absence;
+          # it records the digest the target job later migrates onto, pinned
+          # before the freeze. That revision B played no part in the freeze is
+          # established by the source job never reading it, not by this step.
           echo "revision_b_sha256=$(shasum -a 256 "$REVISION_B" | cut -d' ' -f1)"
 
       - name: Freeze revision A through the public CLI

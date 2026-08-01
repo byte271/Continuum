@@ -15,7 +15,10 @@ host regardless of speed. The freeze itself is still an ordinary external
 
 The workload is supplied as a file rather than embedded here, and the
 checkpoint is a safe-point index rather than a predicate over program
-variables, so nothing in this harness recognizes any particular program.
+variables, so nothing in this harness recognizes any particular program. The
+replay check follows from that: it compares line multiplicities against the
+uninterrupted control rather than assuming the workload emits globally unique
+lines.
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ import os
 import platform
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -339,9 +343,23 @@ def target_role(args: argparse.Namespace) -> int:
     control_stdout = (source_dir / "control-stdout.log").read_text(encoding="utf-8")
     combined = source_stdout + resumed["stdout"]
 
-    source_lines = source_stdout.splitlines()
-    resumed_lines = resumed["stdout"].splitlines()
-    repeated = sorted(set(source_lines) & set(resumed_lines))
+    # Replay check by multiplicity against the uninterrupted control, not by
+    # set intersection between the two halves. Intersection reported a repeat
+    # for any line the program legitimately emits on both sides of the
+    # checkpoint -- a blank line, a banner, a separator, a repeated value --
+    # so the check silently depended on the workload emitting globally unique
+    # lines, which the harness explicitly does not get to assume. A line is
+    # evidence of replay only when the interrupted run produces it more often
+    # than the control did.
+    combined_counts = Counter(line for line in combined.splitlines() if line.strip())
+    control_counts = Counter(
+        line for line in control_stdout.splitlines() if line.strip()
+    )
+    repeated = sorted(
+        line
+        for line, count in combined_counts.items()
+        if count > control_counts.get(line, 0)
+    )
 
     report = {
         "role": "target",

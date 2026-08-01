@@ -31,6 +31,7 @@ import random
 import subprocess
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -68,11 +69,27 @@ CORPUS = REPOSITORY / "compatibility" / "programs"
 
 # Classifications. Only ACCEPTED contributes to the correctness rate; a silent
 # mismatch is the one outcome that must never occur.
+#
+# The three "this program is out of scope" outcomes are kept apart because they
+# say different things about the runtime. A frontend gap means the language
+# subset does not accept the source at all. A checkpoint-object limit means the
+# program ran but held a live object that cannot be serialized. A runtime
+# failure means the program itself raised. Reporting all three as a frontend
+# limit understated the second and third: the published corpus recorded
+# "unsupported live object: _hashlib.HASH" and "cannot checkpoint iteration
+# over dict_items" under a frontend label.
 ACCEPTED = "accepted-and-correct"
 REFUSED = "explicitly-refused"
 UNSUPPORTED = "unsupported-by-language-frontend"
+UNSUPPORTED_OBJECT = "unsupported-live-object-at-checkpoint"
+RUNTIME_FAILURE = "program-runtime-failure"
 INFRASTRUCTURE = "infrastructure-failure"
+TIMEOUT = "worker-timeout"
 MISMATCH = "silent-mismatch"
+
+# Every outcome that puts a case outside the accepted set without being a
+# defect in Continuum. Reported individually, never folded into correctness.
+OUT_OF_SCOPE = (UNSUPPORTED, UNSUPPORTED_OBJECT, RUNTIME_FAILURE)
 
 
 class Fingerprinter:
@@ -402,13 +419,21 @@ def worker() -> int:
             raise ValueError(f"unknown action {action!r}")
         print(json.dumps({"ok": True, "payload": payload}))
         return 0
-    except (
-        CompileError,
-        UnsupportedObjectError,
-    ) as exc:
+    except CompileError as exc:
         print(
             json.dumps(
                 {"ok": False, "kind": UNSUPPORTED, "error": f"{type(exc).__name__}: {exc}"}
+            )
+        )
+        return 0
+    except UnsupportedObjectError as exc:
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "kind": UNSUPPORTED_OBJECT,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             )
         )
         return 0
@@ -422,7 +447,11 @@ def worker() -> int:
     except (ExecutionError, ContinuumError) as exc:
         print(
             json.dumps(
-                {"ok": False, "kind": UNSUPPORTED, "error": f"{type(exc).__name__}: {exc}"}
+                {
+                    "ok": False,
+                    "kind": RUNTIME_FAILURE,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             )
         )
         return 0
@@ -443,15 +472,25 @@ def worker() -> int:
 
 
 def call(python: str, request: dict[str, Any], timeout: float) -> dict[str, Any]:
-    completed = subprocess.run(
-        [python, str(Path(__file__).resolve()), "worker"],
-        input=json.dumps(request),
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        cwd=str(REPOSITORY),
-        env={**os.environ, "PYTHONPATH": str(REPOSITORY)},
-    )
+    try:
+        completed = subprocess.run(
+            [python, str(Path(__file__).resolve()), "worker"],
+            input=json.dumps(request),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=str(REPOSITORY),
+            env={**os.environ, "PYTHONPATH": str(REPOSITORY)},
+        )
+    except subprocess.TimeoutExpired:
+        # One slow case must not abort the corpus with a traceback and leave no
+        # report written. It is recorded like any other failure so the run
+        # still produces evidence.
+        return {
+            "ok": False,
+            "kind": TIMEOUT,
+            "error": f"worker exceeded {timeout} seconds",
+        }
     if completed.returncode != 0 or not completed.stdout.strip():
         return {
             "ok": False,
@@ -536,11 +575,27 @@ def compare(
             f"final result differed: {target['result']} != {control['result']}"
         )
 
-    prefix_lines = [line for line in source["stdout"].splitlines() if line]
-    suffix_lines = [line for line in target["stdout"].splitlines() if line]
-    repeated = sorted(set(prefix_lines) & set(suffix_lines))
-    if repeated:
-        differences.append(f"completed actions repeated: {repeated[:5]}")
+    # Replay check. `combined == control` above is already exact, so a line
+    # appearing on both sides of the checkpoint is only evidence of replay if
+    # it appears *more often* than the uninterrupted control produced it. Set
+    # intersection flagged any line a program legitimately prints on both sides
+    # -- a blank line, a banner, a separator, or a repeated value -- and
+    # produced a silent-mismatch classification for a run whose output matched
+    # the control byte for byte. The release gate asserts zero silent
+    # mismatches, so that false finding would block a release.
+    combined_counts = Counter(
+        line for line in combined.splitlines() if line.strip()
+    )
+    control_counts = Counter(
+        line for line in control["stdout"].splitlines() if line.strip()
+    )
+    over_produced = sorted(
+        line
+        for line, count in combined_counts.items()
+        if count > control_counts.get(line, 0)
+    )
+    if over_produced:
+        differences.append(f"completed actions repeated: {over_produced[:5]}")
 
     return differences
 
@@ -662,7 +717,7 @@ def run_corpus(args: argparse.Namespace) -> int:
         counts[case["classification"]] = counts.get(case["classification"], 0) + 1
     accepted = counts.get(ACCEPTED, 0)
     mismatches = counts.get(MISMATCH, 0)
-    infrastructure = counts.get(INFRASTRUCTURE, 0)
+    infrastructure = counts.get(INFRASTRUCTURE, 0) + counts.get(TIMEOUT, 0)
     decided = accepted + mismatches
 
     report = {
@@ -676,11 +731,14 @@ def run_corpus(args: argparse.Namespace) -> int:
         "checkpoints_per_program": args.checkpoints,
         "cases": len(cases),
         "counts": counts,
-        # Refusals and frontend gaps are reported separately and are never
-        # folded into the correctness rate.
+        # Refusals and out-of-scope cases are reported separately and are never
+        # folded into the correctness rate. The three out-of-scope reasons are
+        # broken out individually so a checkpoint-object limit or a program
+        # runtime failure is not read as a language-frontend gap.
         "correctness_among_accepted_cases": (
             1.0 if decided == 0 else accepted / decided
         ),
+        "out_of_scope": {kind: counts.get(kind, 0) for kind in OUT_OF_SCOPE},
         "silent_mismatches": mismatches,
         "infrastructure_failures": infrastructure,
         "elapsed_seconds": round(elapsed, 2),
@@ -701,10 +759,10 @@ def run_corpus(args: argparse.Namespace) -> int:
                 f"{case.get('differences')}",
                 file=sys.stderr,
             )
-        elif case["classification"] == INFRASTRUCTURE:
+        elif case["classification"] in (INFRASTRUCTURE, TIMEOUT):
             print(
-                f"INFRASTRUCTURE {case['program']}@{case['safe_point']}: "
-                f"{case.get('detail')}",
+                f"{case['classification'].upper()} "
+                f"{case['program']}@{case['safe_point']}: {case.get('detail')}",
                 file=sys.stderr,
             )
     if mismatches or infrastructure:

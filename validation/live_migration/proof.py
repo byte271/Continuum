@@ -159,7 +159,12 @@ def source_role(args: argparse.Namespace) -> int:
             "source_process": {
                 "pid": process.pid,
                 "exit_status": exit_status,
-                "exited_and_reaped_before_target": True,
+                # Measured, not asserted. `process.poll()` returns a status only
+                # for a process that has terminated and been reaped, and the
+                # raise above already refuses to continue when it does not. A
+                # literal True here made both downstream assertions -- in the
+                # workflow and in the final report -- tautologies.
+                "exited_and_reaped_before_target": exit_status is not None,
                 "session_id": ready["session_id"],
             },
             "freeze": {
@@ -355,7 +360,6 @@ def target_role(args: argparse.Namespace) -> int:
         "oracle_failures": failures,
         "cli_only": True,
     }
-    write_json(output / "final-report.json", report)
     (output / "suffix.log").write_text(resumed.stdout, encoding="utf-8")
     (output / "combined.log").write_text(prefix + resumed.stdout, encoding="utf-8")
     write_json(output / "source-evidence.json", evidence)
@@ -368,6 +372,13 @@ def target_role(args: argparse.Namespace) -> int:
         failures.append(f"only {plan['active_frames']} active frames mapped")
     if not plan["mapping_is_total"]:
         failures.append("the mapping was not total")
+
+    # Written last, so the archived artifact records every failure. Serializing
+    # before these four appends stored "oracle_failures": [] for a run that
+    # failed for exactly those reasons -- CI still failed correctly, but the
+    # retained evidence contradicted it.
+    report["oracle_failures"] = failures
+    write_json(output / "final-report.json", report)
 
     print(json.dumps(report, indent=2, sort_keys=True))
     if failures:
