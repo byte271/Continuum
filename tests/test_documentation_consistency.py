@@ -306,27 +306,40 @@ class SupersededRevisionTests(unittest.TestCase):
     *current* attached to a revision that is not.
     """
 
-    DOCS = (
-        "README.md",
-        "STATUS.md",
-        "PORTABILITY.md",
-        "FORMAT.md",
-        "PERFORMANCE.md",
-        "COMPATIBILITY.md",
-        "LIMITATIONS.md",
-        "ARCHITECTURE.md",
-        "LANGUAGE_SUPPORT.md",
-        "docs/TESTING.md",
+    def documents(self) -> list[str]:
+        """Every markdown file in the tree, discovered rather than listed.
+
+        A hand-maintained inventory is the wrong shape for this check: a new
+        document, or one left off the list, is exactly where a stale claim
+        survives unnoticed. Discovery means adding a file cannot silently opt
+        it out.
+        """
+
+        found = sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").glob("*.md"))
+        return [path.relative_to(ROOT).as_posix() for path in found]
+
+    # Both orderings, because the claim reads naturally either way:
+    # "Current IR 0.3" / "Current development uses IR 0.3", and
+    # "IR 0.3 is current". Bounded so neither can reach across a sentence
+    # boundary into an unrelated historical clause.
+    CURRENT_IR = (
+        re.compile(r"[Cc]urrent[^.\n]{0,40}?\bIR (\d+\.\d+)"),
+        re.compile(r"\bIR (\d+\.\d+)\b[^.\n]{0,40}?\b(?:is|remains|stays)\s+current"),
     )
 
-    # "Current IR 0.3", "current Continuum IR 0.3", "Current development uses
-    # IR 0.3". Bounded so it cannot reach across a sentence boundary into an
-    # unrelated historical clause.
-    CURRENT_IR = re.compile(r"[Cc]urrent[^.\n]{0,40}?\bIR (\d+\.\d+)")
+    def test_every_markdown_file_is_covered(self):
+        """The guard is only as good as its reach."""
+
+        documents = self.documents()
+        self.assertGreaterEqual(len(documents), 16, documents)
+        for required in ("README.md", "STATUS.md", "docs/TESTING.md"):
+            self.assertIn(required, documents)
 
     def test_no_document_calls_a_superseded_ir_revision_current(self):
-        for name in self.DOCS:
-            for claimed in self.CURRENT_IR.findall(read(name)):
+        for name in self.documents():
+            text = read(name)
+            claims = [c for pattern in self.CURRENT_IR for c in pattern.findall(text)]
+            for claimed in claims:
                 with self.subTest(document=name, claimed=claimed):
                     self.assertEqual(
                         claimed,
@@ -456,15 +469,24 @@ class NotWorkingAccuracyTests(unittest.TestCase):
                     )
 
     def test_not_working_python_version_claim_matches_the_allowlist(self):
+        """Set equality, not containment, in both directions.
+
+        Containment alone passes a section that names every verified version
+        *and* an unverified one -- which is the more dangerous error of the
+        two, since it advertises support that does not exist. The failure this
+        replaced was an omission, but the check has to catch both.
+        """
+
         section = self.section("NOT WORKING")
-        for version in abi.VERIFIED_PYTHON_VERSIONS:
-            with self.subTest(version=version):
-                self.assertIn(
-                    version,
-                    section,
-                    f"STATUS.md excludes verified Python {version} by omission; "
-                    "the NOT WORKING entry must name the whole allowlist",
-                )
+        documented = set(re.findall(r"\b3\.\d+\.\d+\b", section))
+        self.assertEqual(
+            documented,
+            set(abi.VERIFIED_PYTHON_VERSIONS),
+            "STATUS.md's NOT WORKING version entry disagrees with "
+            f"abi.VERIFIED_PYTHON_VERSIONS; missing "
+            f"{sorted(set(abi.VERIFIED_PYTHON_VERSIONS) - documented)}, "
+            f"unexpected {sorted(documented - set(abi.VERIFIED_PYTHON_VERSIONS))}",
+        )
 
 
 if __name__ == "__main__":

@@ -290,8 +290,9 @@ python3 -m continuum resume process.cont --upgrade migration.cup
 exact element it could not map. It is never partial. `inspect-upgrade` prints a
 plan without applying it. `verify-upgrade` does not trust the plan: it
 independently re-derives the whole mapping from the image and the plan's own new
-source, and refuses on any difference. None of these commands executes the
-program, and the original `.cont` is never written to.
+source, and refuses on any difference. Those first three commands do not execute
+the program; `resume --upgrade` does, which is the point of it. None of the four
+writes to the original `.cont`.
 
 The accepted edit classes, the refusal codes, and what is deliberately out of
 scope are in `docs/RELEASE_NOTES_0.5.0a1.md`. This path is verified across both
@@ -305,7 +306,7 @@ CPython 3.13.14.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 412 tests and is run natively on Linux x86_64, Apple
+The suite discovers 413 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

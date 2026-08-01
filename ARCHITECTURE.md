@@ -2,11 +2,12 @@
 
 ## Scope
 
-Version 0.2 executes a controlled subset of Python 3.12.13. The application
-source is not edited by its author, but `continuum run` compiles it before
-execution. Suspension occurs only at Continuum `SAFEPOINT` instructions. IR
-0.3 places them after statements, after `for` iterator advancement and target
-binding, before loop back edges/continues, and at finally-body entry.
+Version 0.5.0a1 executes a controlled subset of CPython 3.12.13 and 3.13.14.
+The application source is not edited by its author, but `continuum run`
+compiles it before execution. Suspension occurs only at Continuum `SAFEPOINT`
+instructions. IR 0.4 places them after statements, after `for` iterator
+advancement and target binding, before loop back edges/continues, and at
+finally-body entry.
 
 This architecture restores a Continuum language-level continuation. It does
 not serialize ordinary `PyFrameObject` values and does not claim to migrate a
