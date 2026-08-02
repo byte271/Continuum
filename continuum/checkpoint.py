@@ -503,7 +503,19 @@ class CheckpointStore:
     one being overwritten.
     """
 
-    def __init__(self, directory: str | os.PathLike[str], *, slots: int = MIN_SLOTS):
+    def __init__(
+        self,
+        directory: str | os.PathLike[str],
+        *,
+        slots: int = SLOT_COUNT,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        # Injectable so the phase timings can be asserted exactly. Windows
+        # `time.monotonic()` has ~15.6ms granularity, which is coarser than a
+        # whole commit: real readings collapse to identical values there, so a
+        # test comparing two phases by wall time is measuring the timer, not
+        # the code.
+        self._clock = clock
         self.slots = parse_slots(slots)
         self.directory = Path(directory).expanduser().resolve()
         try:
@@ -867,7 +879,7 @@ class CheckpointStore:
         is never a slot name, so a partial write is not a recovery candidate.
         """
 
-        started = time.monotonic()
+        started = self._clock()
         destination = self.target_slot(lineage_id=lineage_id)
         block = {
             "checkpoint_format_version": CHECKPOINT_METADATA_VERSION,
@@ -909,12 +921,12 @@ class CheckpointStore:
                     f"({type(exc).__name__}): {exc}"
                 ) from exc
             _stage(STAGE_AFTER_TEMPORARY_WRITE)
-            serialization_seconds = time.monotonic() - started
+            serialization_seconds = self._clock() - started
             image_bytes = temporary.stat().st_size
             with open(temporary, "r+b") as handle:
                 os.fsync(handle.fileno())
             _stage(STAGE_AFTER_FLUSH)
-            flush_seconds = time.monotonic() - started
+            flush_seconds = self._clock() - started
             _stage(STAGE_DURING_RENAME)
             try:
                 os.replace(temporary, destination)
@@ -958,7 +970,7 @@ class CheckpointStore:
         # thing -- serialization, flush, rename, and directory flush included.
         # Measuring only up to the flush understated it, and the directory
         # flush is the slowest durability step on many filesystems.
-        elapsed = time.monotonic() - started
+        elapsed = self._clock() - started
         return CheckpointCommitResult(
             generation=generation,
             previous_generation=previous_generation,

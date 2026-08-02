@@ -91,7 +91,7 @@ them by a different rule.
 
 **Accepted-migration correctness: 100%.**
 
-530 tests green on CPython 3.12.13 and 3.13.14.
+531 tests green on CPython 3.12.13 and 3.13.14.
 
 ## A bug the sweep found
 

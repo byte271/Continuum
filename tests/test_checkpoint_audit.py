@@ -417,55 +417,105 @@ class BoundedHistoryTests(unittest.TestCase):
 
 # --------------------------------------------------------------- finding 6
 
+class TickClock:
+    """A clock that advances one tick per read.
+
+    The phase timings are asserted against this rather than against real time.
+    Windows `time.monotonic()` has ~15.6ms granularity -- coarser than an entire
+    commit -- so on that platform real readings collapse to the same value and
+    any `assertGreater` between two phases is testing the timer's resolution,
+    not the measurement code. With a counting clock the expected values are
+    exact integers on every host.
+    """
+
+    def __init__(self):
+        self.reads = 0
+
+    def __call__(self) -> float:
+        self.reads += 1
+        return float(self.reads - 1)
+
+
 class PauseMeasurementTests(unittest.TestCase):
     def test_pause_covers_the_whole_stop_the_world_span(self):
+        """The pause must be the entire commit, not just up to the file flush."""
+
         with TemporaryDirectory() as directory:
-            store = CheckpointStore(Path(directory) / "cp")
+            clock = TickClock()
+            store = CheckpointStore(Path(directory) / "cp", clock=clock)
             result = commit(store, live_vm(), 1)
-            # The VM is stopped for the entire call, so the pause is the whole
-            # commit -- not just serialization and the file flush.
+            # Four readings: start, after serialization, after flush, at the end
+            # (taken after the rename and the directory flush).
+            self.assertEqual(clock.reads, 4)
+            self.assertEqual(result.serialization_seconds, 1.0)
+            self.assertEqual(result.file_flush_seconds, 1.0)
+            self.assertEqual(result.durable_publish_seconds, 1.0)
+            self.assertEqual(result.pause_seconds, 3.0)
+            # The VM is stopped for the whole call, so these are the same span.
             self.assertEqual(result.pause_seconds, result.commit_seconds)
-            phases = (
+            # And the phases account for all of it, with nothing outside.
+            self.assertEqual(
+                result.pause_seconds,
                 result.serialization_seconds
                 + result.file_flush_seconds
-                + result.durable_publish_seconds
+                + result.durable_publish_seconds,
             )
-            self.assertAlmostEqual(result.pause_seconds, phases, places=6)
-            self.assertGreater(result.serialization_seconds, 0.0)
-            self.assertGreaterEqual(result.durable_publish_seconds, 0.0)
-            # The rename and directory flush are inside the measured span.
+            # The rename and directory flush are inside the measured window.
             self.assertGreater(result.pause_seconds, result.serialization_seconds)
 
-    def test_a_slow_publish_step_is_reflected_in_the_pause(self):
-        """Make the durability step measurably expensive and watch the pause."""
+    def test_the_final_reading_is_taken_after_the_directory_flush(self):
+        """Structural proof, independent of how long anything actually takes."""
 
         real = checkpoint_module._fsync_directory
-        marker = {"seen": False}
+        order = []
 
-        def slow(directory, capability):
-            marker["seen"] = True
-            # Real work, not a sleep: hash a buffer so the step genuinely costs
-            # CPU inside the stop-the-world window.
-            import hashlib
-
-            digest = b"x" * 4096
-            for _ in range(2000):
-                digest = hashlib.sha256(digest).digest()
+        def recording(directory, capability):
+            order.append("directory-flush")
             return real(directory, capability)
 
         with TemporaryDirectory() as directory:
-            store = CheckpointStore(Path(directory) / "cp")
+            clock = TickClock()
+            store = CheckpointStore(Path(directory) / "cp", clock=clock)
+            checkpoint_module._fsync_directory = recording
+            try:
+                result = commit(store, live_vm(), 1)
+            finally:
+                checkpoint_module._fsync_directory = real
+            self.assertEqual(order, ["directory-flush"])
+            # The publish phase is nonzero, so the final reading happened after
+            # the flush rather than before the rename as it used to.
+            self.assertGreater(result.durable_publish_seconds, 0.0)
+
+    def test_extra_work_in_the_publish_step_lands_in_the_publish_phase(self):
+        """A slower durability step must widen the pause, not disappear."""
+
+        real = checkpoint_module._fsync_directory
+
+        with TemporaryDirectory() as directory:
+            clock = TickClock()
+            store = CheckpointStore(Path(directory) / "cp", clock=clock)
             baseline = commit(store, live_vm(), 1)
+
+            def slow(dir_path, capability):
+                # Consume clock ticks the way real work would, deterministically.
+                for _ in range(5):
+                    store._clock()
+                return real(dir_path, capability)
+
             checkpoint_module._fsync_directory = slow
             try:
                 slowed = commit(store, live_vm(), 2, previous=1)
             finally:
                 checkpoint_module._fsync_directory = real
-            self.assertTrue(marker["seen"])
+            self.assertEqual(baseline.durable_publish_seconds, 1.0)
+            self.assertEqual(slowed.durable_publish_seconds, 6.0)
             self.assertGreater(
-                slowed.durable_publish_seconds, baseline.durable_publish_seconds
+                slowed.pause_seconds, baseline.pause_seconds
             )
-            self.assertGreater(slowed.pause_seconds, slowed.serialization_seconds)
+            # Serialization is unchanged; only the publish phase grew.
+            self.assertEqual(
+                slowed.serialization_seconds, baseline.serialization_seconds
+            )
 
 
 # --------------------------------------------------------------- finding 8

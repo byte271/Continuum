@@ -207,40 +207,41 @@ No native extension, JIT, or architecture-specific acceleration was added.
 
 ## Rolling checkpoints
 
-Measured with `benchmarks/measure_checkpoints.py`. Raw JSON is in
-`benchmarks/results/checkpoints-linux-x86_64.json`.
+**No verified checkpoint measurements are published yet.**
 
-**These are Linux x86_64 figures from one host and do not transfer to macOS or
-Windows.** No macOS or Windows checkpoint benchmark has been run. The host was
-a 4-CPU Linux x86_64 container on an overlay filesystem, CPython 3.12.3,
-60000 loop iterations per workload.
+An earlier revision of this section quoted figures produced under CPython
+3.12.3. That interpreter is not in `abi.VERIFIED_PYTHON_VERSIONS`, so those
+numbers described something this runtime refuses to run and have been
+withdrawn rather than annotated. They are not reproduced here, and
+`benchmarks/measure_checkpoints.py` now refuses to start on an interpreter
+outside the runtime's own allowlist, so the same mistake cannot be repeated.
 
-| Workload | State | Pause (median) | Pause (p95) | Commit (median) | Image | Recovery scan |
-| --- | --- | --- | --- | --- | --- | --- |
-| small-state | flat counters | 9.4 ms | 10.4 ms | 10.1 ms | 8.0 KiB | 2.7 ms |
-| large-graph | 400 rows, shared refs + cycle | 17.5 ms | 22.3 ms | 18.1 ms | 17.1 KiB | 5.9 ms |
+They would also have been wrong for a second reason: `pause_seconds` at the
+time stopped measuring before the rename and the directory flush, which
+understated the real stop-the-world pause. It now covers the whole commit, with
+`serialization_seconds`, `file_flush_seconds`, and `durable_publish_seconds`
+reported separately.
 
-Scheduling overhead when checkpointing is enabled but no checkpoint is due --
-the cost paid at every safe point -- was **0.07 µs/safe-point** (small-state)
-and **0.35 µs/safe-point** (large-graph) over ~180000 safe points.
+### Where the numbers come from
 
-*Pause* is the stop-the-world serialization time: the program is not running
-during it. It is reported separately from the requested interval on purpose,
-because the interval is a scheduling target and the pause is the actual cost.
+The `checkpoint benchmark (ubuntu-24.04)` job in `rolling-checkpoints.yml` runs
+`measure_checkpoints.py` on exact CPython 3.12.13 and uploads
+`checkpoint-benchmark-<run-id>.json` as a build artifact. The report records the
+commit SHA, interpreter, platform, requested interval, committed and coalesced
+tick counts, the complete pause, the durable-commit duration, phase
+breakdowns, image size, write amplification, and recovery validation time.
 
-At a 100 ms requested interval both workloads kept up with **zero coalesced
-ticks**: the pause is 9-22% of the interval. A large enough heap will not keep
-up, at which point missed deadlines collapse into a single next checkpoint
-rather than queueing.
+Runner figures are shared-tenant and noisy. Publishing a table here requires a
+measurement taken deliberately on known hardware, on a verified interpreter,
+and recorded with its environment -- not a number copied out of a CI log.
 
-**Write amplification is total, by design.** Every checkpoint writes a complete
-image, including any bundled read-only resources. Over the measured runs that
-was 24 KiB written for 3 commits (small-state) and 120 KiB for 7 commits
-(large-graph) -- 3.0x and 7.0x the size of one image. Sustained 100 ms
-checkpointing of a large bundled workload will write a lot; there is no
-incremental format, and `LIMITATIONS.md` explains why shared blobs between slots
-were rejected.
+**Nothing has been measured on macOS or Windows.** Linux figures must not be
+generalised to either; the Windows durability path in particular does not flush
+the directory entry at all (`LIMITATIONS.md`).
 
-The 1 s and 5 s intervals committed zero checkpoints in these runs because the
-workloads finish sooner. That is reported rather than hidden; a longer workload
-is needed to characterise those intervals.
+### What is known without measurement
+
+Every checkpoint writes a complete image, including any bundled read-only
+resources, so write amplification is total and grows linearly with the
+checkpoint count. There is no incremental format; `LIMITATIONS.md` explains why
+sharing blobs between slots was rejected.
