@@ -374,7 +374,7 @@ CPython 3.13.14.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 531 tests and is run natively on Linux x86_64, Apple
+The suite discovers 533 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

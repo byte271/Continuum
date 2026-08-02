@@ -64,8 +64,11 @@ indistinguishable at this workload size.
 
 One host, one workload, one architecture. Nothing on this page was measured on
 macOS arm64 or Windows x86_64, and no figure should be quoted for those hosts.
-No workflow runs these benchmarks, so performance can still regress silently
-between releases; wiring them into CI is not done.
+No workflow runs *these* benchmarks -- the runtime and migration measurements
+above -- so they can still regress silently between releases; wiring them into
+CI is not done. The rolling-checkpoint benchmark is the exception: it runs in
+`rolling-checkpoints.yml` on every pull request. See the checkpoint section
+below.
 
 ## Historical measurements (0.1.1.dev0, IR 0.2)
 

@@ -137,15 +137,21 @@ class SlotCountTests(unittest.TestCase):
     def test_a_non_default_slot_count_is_refused_by_run(self):
         """`recover` cannot discover another count, so `run` must not offer one."""
 
-        for value in ("1", "3", "8"):
-            with self.subTest(value=value):
-                args = cli._parser().parse_args(
-                    ["run", "--checkpoint-dir", "cps",
-                     "--checkpoint-slots", value, "p.py"]
-                )
-                with self.assertRaises(ContinuumError) as caught:
-                    cli.open_checkpoint_store(args)
-                self.assertIn("exactly 2", str(caught.exception))
+        # A temporary directory rather than a relative "cps": the refusal
+        # currently happens before CheckpointStore would mkdir, but relying on
+        # argument evaluation order to keep a test side-effect free is fragile.
+        with TemporaryDirectory() as directory:
+            for value in ("1", "3", "8"):
+                with self.subTest(value=value):
+                    args = cli._parser().parse_args(
+                        ["run", "--checkpoint-dir", str(Path(directory) / "cp"),
+                         "--checkpoint-slots", value, "p.py"]
+                    )
+                    with self.assertRaises(ContinuumError) as caught:
+                        cli.open_checkpoint_store(args)
+                    self.assertIn("exactly 2", str(caught.exception))
+            # Nothing was created by the refused invocations.
+            self.assertFalse((Path(directory) / "cp").exists())
 
     def test_run_recover_and_checkpoints_agree_on_the_slot_count(self):
         with TemporaryDirectory() as directory:

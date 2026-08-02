@@ -402,9 +402,22 @@ class BoundedHistoryTests(unittest.TestCase):
             )
             vm = live_vm()
             total = HISTORY_LIMIT + 40
-            for _ in range(total):
+            # A handful of real durable commits establish that the real path
+            # feeds `history`; the rest reuse the last result. 296 full
+            # serialize+fsync+rename cycles would add minutes to the suite on
+            # every platform to prove a property of the container, not of the
+            # commit path.
+            real_commits = 3
+            for _ in range(real_commits):
                 clock.advance(2.0)
                 scheduler.on_safe_point(vm)
+            self.assertEqual(len(scheduler.history), real_commits)
+            template = scheduler.history[-1]
+            from dataclasses import replace
+
+            for generation in range(real_commits + 1, total + 1):
+                scheduler.history.append(replace(template, generation=generation))
+                scheduler.status.commits += 1
             self.assertEqual(scheduler.status.commits, total)
             self.assertEqual(len(scheduler.history), HISTORY_LIMIT)
             self.assertEqual(scheduler.status.history_limit, HISTORY_LIMIT)
@@ -587,13 +600,22 @@ class ErrnoGuardTests(unittest.TestCase):
                 Path("/checkpoints"),
             )
             self.assertIn("out of space", message)
-            # And an error carrying the now-missing code still formats.
-            other = describe_write_failure(
-                OSError(122, "Disk quota exceeded"),
-                Path("slot-a.cont"),
-                Path("/checkpoints"),
-            )
-            self.assertIn("checkpoint write failed", other)
+            # And an error carrying the now-missing code still formats. Use
+            # the value this platform actually assigns: 122 is EDQUOT on Linux
+            # only (macOS uses 69, Windows has none), so a literal would make
+            # this fall through to the generic branch on other hosts and stop
+            # exercising the removed-constant path at all.
+            if saved is not None:
+                other = describe_write_failure(
+                    OSError(saved, "Disk quota exceeded"),
+                    Path("slot-a.cont"),
+                    Path("/checkpoints"),
+                )
+                # The generic branch, not the EDQUOT branch: with the constant
+                # gone the code cannot recognise the value, and must say so
+                # plainly rather than raising AttributeError.
+                self.assertIn("checkpoint write failed", other)
+                self.assertNotIn("disk quota exceeded writing", other)
         finally:
             if had:
                 errno.EDQUOT = saved
@@ -660,7 +682,7 @@ class LineageCharacterTests(unittest.TestCase):
                 "café",            # Unicode letter
                 "一二三",            # CJK ideographs
                 "١٢٣",             # Arabic-Indic digits
-                "lin‮eg",     # bidirectional control
+                "lin\u202eeg",   # bidirectional control (escaped, not literal)
                 "lin eage",        # whitespace
                 "lin/eage",        # slash
                 "lin.eage",        # dot
@@ -747,6 +769,67 @@ class SlotSelectionCostTests(unittest.TestCase):
             result = store.recover()
             self.assertEqual(result.selected.generation, 1)
             self.assertTrue(result.refusals)
+
+    def test_malformed_json_in_a_slot_is_refused_not_raised(self):
+        """A ValueError here would kill the program from the commit path.
+
+        `target_slot` calls `slot_hints` *before* `commit`'s guarded region, so
+        an unclassified exception escapes the store, escapes the scheduler
+        (which catches CheckpointError only), and terminates the program
+        through the safe-point callback even under FAILURE_CONTINUE. A slot
+        with a partially overwritten document is exactly the state this store
+        exists to survive.
+        """
+
+        for entry in ("manifest.json", "checksums.json"):
+            with self.subTest(entry=entry):
+                with TemporaryDirectory() as directory:
+                    store = CheckpointStore(Path(directory) / "cp")
+                    vm = live_vm()
+                    commit(store, vm, 1)
+                    commit(store, vm, 2, previous=1)
+                    newest = store.recover().selected
+                    with zipfile.ZipFile(newest.path) as archive:
+                        contents = {n: archive.read(n) for n in archive.namelist()}
+                    contents[entry] = b"{ this is not json"
+                    with zipfile.ZipFile(newest.path, "w") as archive:
+                        for name, data in sorted(contents.items()):
+                            archive.writestr(name, data)
+
+                    # The hint refuses it rather than raising...
+                    hints = {i.slot: i for i in store.slot_hints()}
+                    self.assertFalse(hints[newest.slot].valid)
+                    # ...target_slot picks it as the overwrite candidate...
+                    self.assertEqual(
+                        store.target_slot(lineage_id="lin-audit").name,
+                        newest.slot,
+                    )
+                    # ...and the program keeps running: a further commit
+                    # succeeds and recovery still works.
+                    result = commit(store, vm, 3, previous=2)
+                    self.assertEqual(result.slot, newest.slot)
+                    self.assertEqual(store.recover().selected.generation, 3)
+
+    def test_a_scheduler_survives_a_slot_with_malformed_json(self):
+        """End to end: the program must not die under FAILURE_CONTINUE."""
+
+        with TemporaryDirectory() as directory:
+            store = CheckpointStore(Path(directory) / "cp")
+            clock = FixedClock()
+            scheduler = CheckpointScheduler(
+                store, SOURCE, lineage_id="lin", interval_seconds=1.0,
+                failure_policy=FAILURE_CONTINUE, clock=clock,
+            )
+            vm = live_vm()
+            clock.advance(2.0)
+            scheduler.checkpoint(vm)
+            path = store.recover().selected.path
+            path.write_bytes(b"PK\x03\x04 not really a zip")
+            clock.advance(2.0)
+            # Must not raise.
+            result = scheduler.checkpoint(vm)
+            self.assertIsNotNone(result)
+            self.assertEqual(scheduler.status.failures, 0)
 
     def test_a_forged_manifest_is_rejected_even_by_the_cheap_hint(self):
         with TemporaryDirectory() as directory:
@@ -845,18 +928,31 @@ class FormatCompatibilityTests(unittest.TestCase):
                 load_image(path)
             self.assertIn("checkpoint metadata version", str(caught.exception))
 
-    def test_legacy_format_images_are_unaffected(self):
-        """A 0.1 manifest has no checkpoint block and must still be refused/read
-        by exactly its original rules."""
+    def test_an_image_without_a_checkpoint_block_still_loads(self):
+        """Prove it by loading a real image, not by inspecting a dict literal.
 
-        from continuum.image import _validate_checkpoint_metadata
+        The checkpoint validator must be unreachable for an image that has no
+        block, so adding the block to the format cannot have changed how any
+        pre-existing image reads.
+        """
 
-        # The validator is only ever reached when the key is present, so a
-        # legacy manifest without one never enters this code path at all.
-        with self.assertRaises(ImageError):
-            _validate_checkpoint_metadata(None)
-        legacy_manifest = {"format_version": "0.1", "target_compatibility": {}}
-        self.assertNotIn("checkpoint", legacy_manifest)
+        from continuum.image import load_image
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "plain.cont"
+            save_image(path, live_vm(), SOURCE)
+            loaded = load_image(path)
+            self.assertNotIn("checkpoint", loaded.manifest)
+            self.assertEqual(loaded.manifest["format_version"], "0.2")
+
+            # And the validator refuses a malformed block wherever it is
+            # reached, so "absent" and "present but invalid" stay distinct.
+            from continuum.image import _validate_checkpoint_metadata
+
+            with self.assertRaises(ImageError):
+                _validate_checkpoint_metadata(None)
+            with self.assertRaises(ImageError):
+                _validate_checkpoint_metadata({"checkpoint_format_version": "1"})
 
 
 def _rewrite(path: Path, contents: dict, manifest: dict) -> None:

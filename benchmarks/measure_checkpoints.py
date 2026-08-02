@@ -37,6 +37,15 @@ def require_verified_interpreter() -> None:
     from the runtime's own gate.
     """
 
+    implementation = platform.python_implementation()
+    if implementation != "CPython":
+        # The allowlist names CPython versions. Another implementation
+        # reporting an allowed version number is still unverified, and its
+        # numbers would describe a runtime nobody has exercised.
+        raise SystemExit(
+            f"refusing to benchmark on {implementation}; the verified "
+            "allowlist covers CPython only."
+        )
     current = platform.python_version()
     if current not in VERIFIED_PYTHON_VERSIONS:
         raise SystemExit(
@@ -131,11 +140,15 @@ def _run_workload(source: str, directory: Path, interval: float) -> dict:
     commits = [item.commit_seconds for item in scheduler.history]
     sizes = [item.image_bytes for item in scheduler.history]
     serialization = [item.serialization_seconds for item in scheduler.history]
+    file_flush = [item.file_flush_seconds for item in scheduler.history]
     publish = [item.durable_publish_seconds for item in scheduler.history]
     return {
         "requested_interval_seconds": interval,
         "wall_seconds": wall,
-        "checkpoints_committed": len(scheduler.history),
+        # Lifetime, from status. `history` is a bounded window and would
+        # undercount any run longer than HISTORY_LIMIT commits.
+        "checkpoints_committed": scheduler.status.commits,
+        "history_window_records": len(scheduler.history),
         "coalesced_ticks": scheduler.status.coalesced_ticks,
         "failures": scheduler.status.failures,
         # The complete stop-the-world pause: serialization, flush, rename, and
@@ -143,14 +156,14 @@ def _run_workload(source: str, directory: Path, interval: float) -> dict:
         "pause_seconds": _summary(pauses),
         "durable_commit_seconds": _summary(commits),
         "serialization_seconds": _summary(serialization),
+        "file_flush_seconds": _summary(file_flush),
         "durable_publish_seconds": _summary(publish),
         "image_bytes": _summary(sizes),
-        "history_records_retained": len(scheduler.history),
-        "bytes_written_total": sum(sizes),
-        # Every checkpoint rewrites the whole image, so amplification is the
-        # total written divided by what one image costs. This is the cost the
-        # first implementation deliberately accepts; see PERFORMANCE.md.
-        "write_amplification": (
+        # Explicitly window-scoped: these sum the retained history, not the
+        # lifetime, and are only equal to the lifetime figures when
+        # checkpoints_committed <= the history window.
+        "bytes_written_in_history_window": sum(sizes),
+        "write_amplification_in_history_window": (
             sum(sizes) / sizes[-1] if sizes else None
         ),
         "safe_points_executed": vm.safe_points_executed,

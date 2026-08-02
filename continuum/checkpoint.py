@@ -456,7 +456,16 @@ def _read_verified_manifest_block(path: Path) -> dict[str, Any] | None:
                 raise ImageError(f"{required} is implausibly large")
         raw_manifest = archive.read("manifest.json")
         raw_checksums = archive.read("checksums.json")
-    checksums = json.loads(raw_checksums)
+    # json.loads raises JSONDecodeError, which is a ValueError, not an
+    # ImageError. Left unwrapped it escapes slot_hints -> target_slot, which
+    # runs before commit's guarded region, and would terminate the program
+    # through the safe-point callback even under FAILURE_CONTINUE. A slot with
+    # a partially overwritten document is exactly what this store exists to
+    # survive, so it must be a refusal, not a crash.
+    try:
+        checksums = json.loads(raw_checksums)
+    except ValueError as exc:
+        raise ImageError(f"checksums.json is not valid JSON: {exc}") from exc
     if (
         not isinstance(checksums, dict)
         or checksums.get("algorithm") != "sha256"
@@ -466,7 +475,10 @@ def _read_verified_manifest_block(path: Path) -> dict[str, Any] | None:
     expected = checksums["entries"].get("manifest.json")
     if not isinstance(expected, str) or hashlib.sha256(raw_manifest).hexdigest() != expected:
         raise ImageError("manifest digest does not match the checksum document")
-    manifest = json.loads(raw_manifest)
+    try:
+        manifest = json.loads(raw_manifest)
+    except ValueError as exc:
+        raise ImageError(f"manifest.json is not valid JSON: {exc}") from exc
     if not isinstance(manifest, dict):
         raise ImageError("manifest is not an object")
     block = manifest.get("checkpoint")
@@ -571,7 +583,12 @@ class CheckpointStore:
                 continue
             try:
                 block = _read_verified_manifest_block(path)
-            except (ImageError, OSError, zipfile.BadZipFile, KeyError) as exc:
+            except (
+                ImageError, OSError, zipfile.BadZipFile, KeyError, ValueError
+            ) as exc:
+                # ValueError covers any JSON parse failure the conversions above
+                # miss. A slot this reader cannot understand is refused, never
+                # raised out of the commit path.
                 results.append(
                     SlotInspection(slot, path, present=True, valid=False,
                                    reason=f"unreadable manifest: {exc}")
