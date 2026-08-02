@@ -29,23 +29,58 @@ and surfaced by `continuum checkpoints` instead of being silently assumed.
 from __future__ import annotations
 
 import errno
+import hashlib
+import json
 import os
 import re
 import time
 import uuid
-from dataclasses import dataclass, field
+import zipfile
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .errors import CheckpointError, ImageError
+from .errors import (
+    CheckpointError,
+    ImageError,
+    ResourceError,
+    UnsupportedObjectError,
+)
 from .image import (
     CHECKPOINT_METADATA_VERSION,
     CHECKPOINT_MODE_PERIODIC,
     DIRECTORY_FSYNC_SUPPORTED,
     DIRECTORY_FSYNC_UNSUPPORTED,
+    MAX_ENTRIES,
+    _validate_checkpoint_metadata,
     load_image,
     save_image,
+)
+
+# `manifest.json` is a small JSON document; anything near this is malformed or
+# hostile, and the cheap reader refuses it rather than decompressing it.
+MAX_MANIFEST_SIZE = 1024 * 1024
+
+# Everything `save_image` raises for a state it cannot capture, as opposed to a
+# bug in Continuum. These become CheckpointError so the configured failure
+# policy decides what happens, instead of the exception escaping through
+# `vm.run()` and killing a program that is otherwise healthy.
+#
+# Deliberately not `Exception`: AssertionError, TypeError, AttributeError and
+# friends indicate a defect here and must keep propagating, and
+# KeyboardInterrupt/SystemExit are BaseException and are never caught.
+#   UnsupportedObjectError - the graph codec refuses a live value
+#   ResourceError          - a tracked resource cannot be snapshotted
+#   ImageError             - the image cannot be constructed or re-decoded
+#   RecursionError         - the live graph is too deep to encode; a property
+#                            of the data, not of the code
+CAPTURE_FAILURES = (
+    UnsupportedObjectError,
+    ResourceError,
+    ImageError,
+    RecursionError,
 )
 
 SLOT_NAMES = ("slot-a", "slot-b")
@@ -54,12 +89,46 @@ TEMPORARY_PREFIX = ".checkpoint-"
 TEMPORARY_SUFFIX = ".tmp"
 MIN_INTERVAL_SECONDS = 0.001
 MAX_INTERVAL_SECONDS = 86_400.0
-MIN_SLOTS = 2
-MAX_SLOTS = 8
+# Exactly two committed slots. Two is the minimum that can hold a committed
+# checkpoint while the next one is written, and more than two bought nothing:
+# the rotation only ever needs "the one being written" and "the one to fall
+# back to". A configurable count also has to be discovered by `recover` and
+# `checkpoints`, and the only trustworthy place to record it is inside the
+# images -- which cannot be read until the slots are already known. Rather than
+# invent an unauthenticated slot-count file or scan the directory for anything
+# that looks like a slot, the count is fixed.
+SLOT_COUNT = 2
+MIN_SLOTS = SLOT_COUNT
+MAX_SLOTS = SLOT_COUNT
+# Bounded so a process that checkpoints every 100ms for weeks cannot grow this
+# without limit. `status` keeps the lifetime totals; this is a recent window for
+# reporting and for the benchmark, which reads only what it just produced.
+HISTORY_LIMIT = 256
 
 FAILURE_CONTINUE = "continue"
 FAILURE_TERMINATE = "terminate"
 FAILURE_POLICIES = (FAILURE_CONTINUE, FAILURE_TERMINATE)
+
+# Why recovery did not produce a checkpoint. Only OUTCOME_EMPTY means "there is
+# genuinely nothing here"; every other value means state exists and was
+# refused, which an explicit recovery request must treat as an error rather
+# than as licence to start the program over from the beginning.
+OUTCOME_RECOVERED = "recovered"
+OUTCOME_EMPTY = "empty-directory"
+OUTCOME_NO_VALID_CHECKPOINT = "no-valid-checkpoint"
+OUTCOME_AMBIGUOUS_LINEAGE = "ambiguous-lineage"
+OUTCOME_DUPLICATE_GENERATION = "duplicate-generation"
+OUTCOME_CORRUPT = "corrupt"
+OUTCOME_LINEAGE_NOT_PRESENT = "lineage-not-present"
+RECOVERY_OUTCOMES = (
+    OUTCOME_RECOVERED,
+    OUTCOME_EMPTY,
+    OUTCOME_NO_VALID_CHECKPOINT,
+    OUTCOME_AMBIGUOUS_LINEAGE,
+    OUTCOME_DUPLICATE_GENERATION,
+    OUTCOME_CORRUPT,
+    OUTCOME_LINEAGE_NOT_PRESENT,
+)
 
 # Commit stages, in the order they occur. Tests inject real failures at these
 # boundaries; production runs with no hook installed. The names are part of the
@@ -141,13 +210,22 @@ def parse_interval(text: str) -> float:
 
 
 def parse_slots(value: int) -> int:
+    """Accept only the fixed slot count.
+
+    See SLOT_COUNT: a variable count cannot be discovered by `recover` without
+    either an unauthenticated metadata file or guessing at filenames, and both
+    were rejected. Refusing other values here keeps `run`, `recover`, and
+    `checkpoints` incapable of disagreeing about how many slots exist.
+    """
+
     if not isinstance(value, int) or isinstance(value, bool):
         raise CheckpointError("checkpoint slot count must be an integer")
-    if not MIN_SLOTS <= value <= MAX_SLOTS:
+    if value != SLOT_COUNT:
         raise CheckpointError(
-            f"checkpoint slots must be between {MIN_SLOTS} and {MAX_SLOTS}; "
-            f"got {value}. Two slots are the minimum that can keep a committed "
-            "checkpoint while writing the next one."
+            f"checkpoint slots must be exactly {SLOT_COUNT}; got {value}. Two "
+            "slots are what the rotation needs: one being written and one to "
+            "fall back to. A different count cannot be discovered safely at "
+            "recovery time, so it is refused rather than silently ignored."
         )
     return value
 
@@ -164,7 +242,16 @@ def slot_filename(index: int) -> str:
 
 @dataclass(frozen=True)
 class CheckpointCommitResult:
-    """What one commit attempt actually achieved."""
+    """What one commit attempt actually achieved.
+
+    `pause_seconds` is the **complete** stop-the-world duration: the VM is
+    stopped for the whole synchronous callback, so it covers serialization, the
+    file flush, the atomic rename, and the directory flush. `commit_seconds` is
+    the same span, kept as a separate name because it is what the durability
+    protocol cost. The three phase fields below break that total down and are
+    named for exactly what they measure, so no partial duration is ever
+    reported as the pause.
+    """
 
     generation: int
     previous_generation: int | None
@@ -172,6 +259,9 @@ class CheckpointCommitResult:
     lineage_id: str
     pause_seconds: float
     commit_seconds: float
+    serialization_seconds: float
+    file_flush_seconds: float
+    durable_publish_seconds: float
     image_bytes: int
     directory_fsync: str
     committed_at: str
@@ -206,10 +296,29 @@ class SlotInspection:
 
 @dataclass(frozen=True)
 class CheckpointRecoveryResult:
+    """Why recovery did or did not select a checkpoint.
+
+    `outcome` exists so a caller can tell "this directory is empty, starting
+    fresh is correct" apart from "there is state here that I refused to use".
+    An explicit recovery request must never treat the second as the first and
+    silently restart the program from its entry point.
+    """
+
     selected: SlotInspection | None
     candidates: tuple[SlotInspection, ...]
     lineage_id: str | None
     refusals: tuple[str, ...] = ()
+    outcome: str = OUTCOME_RECOVERED
+
+    @property
+    def recoverable(self) -> bool:
+        return self.selected is not None
+
+    @property
+    def is_clean_start(self) -> bool:
+        """True only for a directory with nothing in it at all."""
+
+        return self.outcome == OUTCOME_EMPTY
 
 
 @dataclass
@@ -234,6 +343,10 @@ class CheckpointStatus:
     failures: int = 0
     coalesced_ticks: int = 0
     directory_fsync: str | None = None
+    # Set when a generation reached a slot but its durability confirmation
+    # failed. The image is readable; the rename may not have been flushed.
+    last_published_without_durability: int | None = None
+    history_limit: int = HISTORY_LIMIT
 
     def as_dict(self) -> dict[str, Any]:
         return dict(self.__dict__)
@@ -269,6 +382,99 @@ def probe_directory_fsync(directory: Path) -> str:
     finally:
         os.close(descriptor)
     return DIRECTORY_FSYNC_SUPPORTED
+
+
+def _errno_is(code: int | None, name: str) -> bool:
+    """Compare against an errno constant that may not exist on this platform.
+
+    `errno` only defines what the underlying C library defines, so `EDQUOT` in
+    particular is absent on some builds. A bare `errno.EDQUOT` would raise
+    AttributeError from inside the error-formatting path and replace the real
+    I/O failure with an unrelated traceback -- the operator would lose the
+    actual reason the checkpoint could not be written.
+    """
+
+    if code is None:
+        return False
+    expected = getattr(errno, name, None)
+    return expected is not None and code == expected
+
+
+def describe_write_failure(
+    exc: OSError, destination: Path, directory: Path
+) -> str:
+    """Turn a raw errno into something an operator can act on.
+
+    Module level and pure so it can be tested directly, including against
+    errno names this platform does not define.
+    """
+
+    code = getattr(exc, "errno", None)
+    if _errno_is(code, "ENOSPC"):
+        return (
+            f"checkpoint directory {directory} is out of space; the "
+            "previously committed checkpoint is unchanged"
+        )
+    if _errno_is(code, "EDQUOT"):
+        return (
+            f"disk quota exceeded writing {destination.name}; the previously "
+            "committed checkpoint is unchanged"
+        )
+    if _errno_is(code, "EACCES") or _errno_is(code, "EPERM"):
+        return f"permission denied writing {destination}: {exc}"
+    if _errno_is(code, "EROFS"):
+        return f"checkpoint directory {directory} is read-only"
+    if _errno_is(code, "EXDEV"):
+        return (
+            f"cannot atomically replace {destination.name} across filesystems; "
+            "the checkpoint directory and its temporary files must live on one "
+            "filesystem"
+        )
+    return f"checkpoint write failed for {destination.name}: {exc}"
+
+
+def _read_verified_manifest_block(path: Path) -> dict[str, Any] | None:
+    """Read `manifest.json`, verify its digest, return its checkpoint block.
+
+    Bounded on purpose: it refuses an archive with an implausible entry count,
+    reads only two named entries, caps how much it will decompress, and checks
+    the manifest against `checksums.json` before parsing anything out of it. It
+    is not a substitute for `load_image` and is never used to select an image
+    for restore -- see `CheckpointStore.slot_hints`.
+    """
+
+    with zipfile.ZipFile(path, "r") as archive:
+        infos = archive.infolist()
+        if not infos or len(infos) > MAX_ENTRIES:
+            raise ImageError("image has an invalid number of entries")
+        by_name = {info.filename: info for info in infos}
+        for required in ("manifest.json", "checksums.json"):
+            info = by_name.get(required)
+            if info is None:
+                raise ImageError(f"image is missing {required}")
+            if info.file_size > MAX_MANIFEST_SIZE:
+                raise ImageError(f"{required} is implausibly large")
+        raw_manifest = archive.read("manifest.json")
+        raw_checksums = archive.read("checksums.json")
+    checksums = json.loads(raw_checksums)
+    if (
+        not isinstance(checksums, dict)
+        or checksums.get("algorithm") != "sha256"
+        or not isinstance(checksums.get("entries"), dict)
+    ):
+        raise ImageError("invalid checksum document")
+    expected = checksums["entries"].get("manifest.json")
+    if not isinstance(expected, str) or hashlib.sha256(raw_manifest).hexdigest() != expected:
+        raise ImageError("manifest digest does not match the checksum document")
+    manifest = json.loads(raw_manifest)
+    if not isinstance(manifest, dict):
+        raise ImageError("manifest is not an object")
+    block = manifest.get("checkpoint")
+    if block is None:
+        return None
+    # Same structural validation the full reader applies, so a hint can never
+    # be looser about what counts as a well-formed block than recovery is.
+    return _validate_checkpoint_metadata(block)
 
 
 def _fsync_directory(directory: Path, capability: str) -> None:
@@ -316,6 +522,66 @@ class CheckpointStore:
         self.directory_fsync = probe_directory_fsync(self.directory)
 
     # ------------------------------------------------------------------ scan
+
+    def slot_hints(self) -> list[SlotInspection]:
+        """Cheap slot summary for the commit path. **Never recovery evidence.**
+
+        Reads two small entries -- `manifest.json` and `checksums.json` -- and
+        verifies the manifest against its recorded digest, instead of
+        decompressing and checksumming every entry the way `load_image` does.
+        That is enough to choose which slot to overwrite and to name the
+        fallback slot in status, and it keeps that work off the stop-the-world
+        pause: `inspect_slots` grows with image size and entry count, and the
+        commit path used to call it twice per checkpoint.
+
+        The manifest digest *is* verified, so a corrupted or forged manifest is
+        not silently trusted here either. But this deliberately does not check
+        the heap, frames, IR, resources, or their cross-document agreement, so
+        a slot it calls `valid` may still be unrestorable. It is an operational
+        hint only. `recover` uses `inspect_slots`, which validates the whole
+        container, and nothing selects a checkpoint for restore from here.
+        """
+
+        results: list[SlotInspection] = []
+        for path in self.slot_paths:
+            slot = path.name
+            if not path.exists():
+                results.append(
+                    SlotInspection(slot, path, present=False, valid=False,
+                                   reason="absent")
+                )
+                continue
+            if path.is_symlink() or not path.is_file():
+                results.append(
+                    SlotInspection(slot, path, present=True, valid=False,
+                                   reason="slot is not a regular file")
+                )
+                continue
+            try:
+                block = _read_verified_manifest_block(path)
+            except (ImageError, OSError, zipfile.BadZipFile, KeyError) as exc:
+                results.append(
+                    SlotInspection(slot, path, present=True, valid=False,
+                                   reason=f"unreadable manifest: {exc}")
+                )
+                continue
+            if block is None:
+                results.append(
+                    SlotInspection(slot, path, present=True, valid=False,
+                                   reason="image carries no checkpoint metadata")
+                )
+                continue
+            results.append(
+                SlotInspection(
+                    slot, path, present=True, valid=True,
+                    generation=block["generation"],
+                    lineage_id=block["lineage_id"],
+                    created_at=block["created_at"],
+                    previous_generation=block.get("previous_generation"),
+                    directory_fsync=block["durability"]["directory_fsync"],
+                )
+            )
+        return results
 
     def inspect_slots(self) -> list[SlotInspection]:
         """Validate every slot independently, trusting nothing outside the file.
@@ -401,8 +667,13 @@ class CheckpointStore:
             if not item.valid and item.present
         ]
         if not valid:
+            # An empty directory is a legitimate fresh start. A directory that
+            # holds files which failed validation is not, and must not be
+            # reported as one.
+            present = [item for item in candidates if item.present]
+            outcome = OUTCOME_EMPTY if not present else OUTCOME_CORRUPT
             return CheckpointRecoveryResult(
-                None, tuple(candidates), lineage_id, tuple(refusals)
+                None, tuple(candidates), lineage_id, tuple(refusals), outcome
             )
         if lineage_id is None:
             # Trust the majority lineage rather than whichever slot happens to
@@ -418,13 +689,12 @@ class CheckpointStore:
                     None,
                     tuple(candidates),
                     None,
-                    tuple(
-                        refusals
-                        + [
-                            "refusing to choose between unrelated lineages "
-                            f"{tied}; pass an explicit lineage to disambiguate"
-                        ]
+                    (
+                        *refusals,
+                        "refusing to choose between unrelated lineages "
+                        f"{tied}; pass an explicit lineage to disambiguate",
                     ),
+                    OUTCOME_AMBIGUOUS_LINEAGE,
                 )
             lineage_id = tied[0]
         matching = []
@@ -438,7 +708,8 @@ class CheckpointStore:
                 )
         if not matching:
             return CheckpointRecoveryResult(
-                None, tuple(candidates), lineage_id, tuple(refusals)
+                None, tuple(candidates), lineage_id, tuple(refusals),
+                OUTCOME_LINEAGE_NOT_PRESENT,
             )
         highest = max(item.generation for item in matching)
         tied_slots = sorted(
@@ -452,7 +723,8 @@ class CheckpointStore:
                 f"({', '.join(tied_slots)}); refusing to guess which is current"
             )
             return CheckpointRecoveryResult(
-                None, tuple(candidates), lineage_id, tuple(refusals)
+                None, tuple(candidates), lineage_id, tuple(refusals),
+                OUTCOME_DUPLICATE_GENERATION,
             )
         selected = next(item for item in matching if item.generation == highest)
         for item in matching:
@@ -462,7 +734,8 @@ class CheckpointStore:
                     f"the selected generation {highest}"
                 )
         return CheckpointRecoveryResult(
-            selected, tuple(candidates), lineage_id, tuple(refusals)
+            selected, tuple(candidates), lineage_id, tuple(refusals),
+            OUTCOME_RECOVERED,
         )
 
     # ---------------------------------------------------------------- commit
@@ -474,9 +747,18 @@ class CheckpointStore:
         return result.selected.generation + 1
 
     def target_slot(self, *, lineage_id: str | None = None) -> Path:
-        """Pick the slot to overwrite: the oldest, never the newest valid one."""
+        """Pick the slot to overwrite: the oldest, never the newest valid one.
 
-        inspections = self.inspect_slots()
+        Uses `slot_hints`, not `inspect_slots`: this runs inside the
+        stop-the-world pause and only needs generation and lineage. A slot the
+        hint wrongly calls valid can at worst be preserved rather than
+        overwritten, which is the safe direction -- it never causes the newest
+        committed checkpoint to be chosen for overwrite, because a hint that
+        cannot read a slot's generation reports it invalid and invalid slots
+        are overwritten first.
+        """
+
+        inspections = self.slot_hints()
         empty = [item for item in inspections if not item.present]
         if empty:
             return empty[0].path
@@ -489,6 +771,40 @@ class CheckpointStore:
             if lineage_id is None or item.lineage_id == lineage_id
         ] or inspections
         return min(relevant, key=lambda item: item.generation).path
+
+    def claim_for_new_lineage(self, lineage_id: str) -> None:
+        """Refuse to start a fresh lineage in a directory another one owns.
+
+        Without this, a `run` that reuses a populated directory without
+        `--recover-latest` starts a new lineage and then only ever overwrites
+        the one slot that already matches it, because `target_slot` prefers the
+        lineage being written. The foreign slots stay forever: with two slots
+        that leaves recovery permanently tied and refusing the directory, and
+        the operator's old checkpoints are silently useless.
+
+        Nothing is deleted here. The user is told to recover the existing
+        lineage, point at an empty directory, or remove it themselves --
+        destroying someone's only crash-recovery state is not a decision this
+        code gets to make quietly.
+        """
+
+        foreign = sorted(
+            {
+                item.lineage_id
+                for item in self.slot_hints()
+                if item.valid and item.lineage_id != lineage_id
+            }
+        )
+        if not foreign:
+            return
+        raise CheckpointError(
+            f"checkpoint directory {self.directory} already holds committed "
+            f"checkpoints for lineage {', '.join(repr(name) for name in foreign)}. "
+            "Starting a new lineage here would leave those slots stranded and "
+            "make recovery ambiguous. Resume them with --recover-latest (or "
+            "`continuum recover`), choose an empty directory, or remove the "
+            "existing checkpoints yourself."
+        )
 
     def cleanup_temporaries(self) -> list[str]:
         """Remove abandoned temporary files left by an interrupted commit.
@@ -583,19 +899,22 @@ class CheckpointStore:
             # implementation for both freeze and checkpoint.
             try:
                 save_image(temporary, vm, source, checkpoint=block)
-            except ImageError as exc:
-                # A state that cannot be serialized is a checkpoint failure, not
-                # a program failure, so it goes through the configured policy
-                # rather than escaping and killing a healthy program.
+            except CAPTURE_FAILURES as exc:
+                # A state that cannot be captured is a checkpoint failure, not a
+                # program failure, so it goes through the configured policy
+                # rather than escaping and killing a healthy program. The
+                # original is preserved as __cause__ and named in the message.
                 raise CheckpointError(
-                    f"checkpoint serialization failed: {exc}"
+                    f"checkpoint capture failed "
+                    f"({type(exc).__name__}): {exc}"
                 ) from exc
             _stage(STAGE_AFTER_TEMPORARY_WRITE)
+            serialization_seconds = time.monotonic() - started
             image_bytes = temporary.stat().st_size
             with open(temporary, "r+b") as handle:
                 os.fsync(handle.fileno())
             _stage(STAGE_AFTER_FLUSH)
-            pause_seconds = time.monotonic() - started
+            flush_seconds = time.monotonic() - started
             _stage(STAGE_DURING_RENAME)
             try:
                 os.replace(temporary, destination)
@@ -603,13 +922,28 @@ class CheckpointStore:
                 raise CheckpointError(
                     self._describe_write_failure(exc, destination)
                 ) from exc
+            # From here the image is installed under a slot name and any reader
+            # can see this generation. Every failure below must therefore carry
+            # the published generation back to the caller.
             committed = True
             _stage(STAGE_AFTER_RENAME)
-            _fsync_directory(self.directory, self.directory_fsync)
-            _stage(STAGE_AFTER_DIRECTORY_FLUSH)
+            try:
+                _fsync_directory(self.directory, self.directory_fsync)
+                _stage(STAGE_AFTER_DIRECTORY_FLUSH)
+            except CheckpointError as exc:
+                exc.published_generation = generation
+                exc.published_slot = destination.name
+                raise
+        except CheckpointError as exc:
+            if committed and exc.published_generation is None:
+                exc.published_generation = generation
+                exc.published_slot = destination.name
+            raise
         except OSError as exc:
             raise CheckpointError(
-                self._describe_write_failure(exc, destination)
+                self._describe_write_failure(exc, destination),
+                published_generation=generation if committed else None,
+                published_slot=destination.name if committed else None,
             ) from exc
         finally:
             if not committed:
@@ -620,13 +954,21 @@ class CheckpointStore:
                     # cleanup_temporaries() on the next start. It is never a
                     # recovery candidate, so leaving it is safe.
                     pass
+        # The VM is stopped for this entire call, so the pause is the whole
+        # thing -- serialization, flush, rename, and directory flush included.
+        # Measuring only up to the flush understated it, and the directory
+        # flush is the slowest durability step on many filesystems.
+        elapsed = time.monotonic() - started
         return CheckpointCommitResult(
             generation=generation,
             previous_generation=previous_generation,
             slot=destination.name,
             lineage_id=lineage_id,
-            pause_seconds=pause_seconds,
-            commit_seconds=time.monotonic() - started,
+            pause_seconds=elapsed,
+            commit_seconds=elapsed,
+            serialization_seconds=serialization_seconds,
+            file_flush_seconds=flush_seconds - serialization_seconds,
+            durable_publish_seconds=elapsed - flush_seconds,
             image_bytes=image_bytes,
             directory_fsync=self.directory_fsync,
             committed_at=block["created_at"],
@@ -635,28 +977,7 @@ class CheckpointStore:
     def _describe_write_failure(self, exc: OSError, destination: Path) -> str:
         """Turn a raw errno into something an operator can act on."""
 
-        code = getattr(exc, "errno", None)
-        if code == errno.ENOSPC:
-            return (
-                f"checkpoint directory {self.directory} is out of space; "
-                "the previously committed checkpoint is unchanged"
-            )
-        if code == errno.EDQUOT:
-            return (
-                f"disk quota exceeded writing {destination.name}; "
-                "the previously committed checkpoint is unchanged"
-            )
-        if code in {errno.EACCES, errno.EPERM}:
-            return f"permission denied writing {destination}: {exc}"
-        if code == errno.EROFS:
-            return f"checkpoint directory {self.directory} is read-only"
-        if code == errno.EXDEV:
-            return (
-                f"cannot atomically replace {destination.name} across "
-                "filesystems; the checkpoint directory and its temporary files "
-                "must live on one filesystem"
-            )
-        return f"checkpoint write failed for {destination.name}: {exc}"
+        return describe_write_failure(exc, destination, self.directory)
 
 
 class CheckpointScheduler:
@@ -709,7 +1030,11 @@ class CheckpointScheduler:
             last_generation=self._generation or None,
             directory_fsync=store.directory_fsync,
         )
-        self.history: list[CheckpointCommitResult] = []
+        # Bounded: lifetime totals live in `status`, so only a recent
+        # window is retained. An unbounded list would gain 36,000 records
+        # an hour at a 100ms interval in a process designed to run for
+        # weeks.
+        self.history: deque[CheckpointCommitResult] = deque(maxlen=HISTORY_LIMIT)
 
     @property
     def generation(self) -> int:
@@ -741,11 +1066,30 @@ class CheckpointScheduler:
                 requested_interval_seconds=self.interval,
             )
         except CheckpointError as exc:
+            # If the rename already installed this generation, it is visible to
+            # every reader whatever happened afterwards. Advance past it, or the
+            # retry would publish the same number into the other slot and leave
+            # two valid slots claiming one generation -- a state recovery
+            # refuses outright, which would turn one transient flush error into
+            # a permanently unrecoverable directory.
+            if exc.published_generation is not None:
+                self._generation = exc.published_generation
+                self.status.last_generation = exc.published_generation
+                self.status.last_slot = exc.published_slot
+                self.status.last_published_without_durability = (
+                    exc.published_generation
+                )
             self.status.writing = False
             self.status.failures += 1
             self.status.last_error = str(exc)
             self._reschedule()
-            self._emit("checkpoint-failed", {"error": str(exc)})
+            self._emit(
+                "checkpoint-failed",
+                {
+                    "error": str(exc),
+                    "published_generation": exc.published_generation,
+                },
+            )
             if self.failure_policy == FAILURE_TERMINATE:
                 raise
             return None
@@ -758,9 +1102,11 @@ class CheckpointScheduler:
         self.status.last_pause_seconds = result.pause_seconds
         self.status.last_slot = result.slot
         self.status.last_error = None
+        # Cheap hints: this is still inside the stop-the-world pause, and
+        # naming the fallback slot does not need every entry checksummed.
         fallback = [
             item
-            for item in self.store.inspect_slots()
+            for item in self.store.slot_hints()
             if item.valid and item.slot != result.slot
         ]
         self.status.fallback_slot = (

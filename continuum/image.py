@@ -63,6 +63,17 @@ DIRECTORY_FSYNC_STATES = {
     DIRECTORY_FSYNC_SUPPORTED,
     DIRECTORY_FSYNC_UNSUPPORTED,
 }
+# Explicit ASCII, not `str.isalnum()`. `isalnum()` accepts characters such as
+# `e-acute`, CJK ideographs, and Arabic-Indic digits, so two visually
+# indistinguishable lineage identifiers could be reported by
+# `continuum checkpoints` as if they were the same session. The value never
+# builds a path, so this is a legibility and confusability boundary rather than
+# a traversal one, but the accepted set should still be exactly what the
+# documentation says it is.
+LINEAGE_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_"
+)
+MAX_LINEAGE_LENGTH = 128
 # The target pairs this runtime will attempt to restore. Membership is a
 # format-compatibility decision only; it is never evidence that a source or
 # target platform has been exercised. PORTABILITY.md holds that evidence.
@@ -570,8 +581,8 @@ def _validate_checkpoint_metadata(block: Any) -> dict[str, Any]:
     lineage = block.get("lineage_id")
     if (
         not isinstance(lineage, str)
-        or not 1 <= len(lineage) <= 128
-        or not all(character.isalnum() or character in "-_" for character in lineage)
+        or not 1 <= len(lineage) <= MAX_LINEAGE_LENGTH
+        or not set(lineage) <= LINEAGE_CHARACTERS
     ):
         raise ImageError("checkpoint lineage identifier is not a safe token")
     generation = block.get("generation")

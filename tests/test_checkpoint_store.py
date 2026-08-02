@@ -21,8 +21,10 @@ from continuum.checkpoint import (
     DIRECTORY_FSYNC_UNSUPPORTED,
     FAILURE_CONTINUE,
     FAILURE_TERMINATE,
+    HISTORY_LIMIT,
     MAX_INTERVAL_SECONDS,
     MIN_INTERVAL_SECONDS,
+    SLOT_COUNT,
     CheckpointScheduler,
     CheckpointStore,
     parse_interval,
@@ -110,13 +112,24 @@ class IntervalParsingTests(unittest.TestCase):
         with self.assertRaises(CheckpointError):
             parse_interval(f"{int(MAX_INTERVAL_SECONDS) + 1}s")
 
-    def test_slot_counts(self):
-        self.assertEqual(parse_slots(2), 2)
-        self.assertEqual(parse_slots(3), 3)
-        for value in (0, 1, -1, 9, True, 2.0, "2"):
+    def test_only_the_fixed_slot_count_is_accepted(self):
+        """A count `recover` cannot discover must not be accepted by `run`."""
+
+        self.assertEqual(parse_slots(SLOT_COUNT), 2)
+        for value in (0, 1, -1, 3, 4, 8, 9, True, 2.0, "2", None):
             with self.subTest(value=value):
                 with self.assertRaises(CheckpointError):
                     parse_slots(value)
+
+    def test_a_store_always_has_exactly_two_slots(self):
+        with TemporaryDirectory() as directory:
+            store = CheckpointStore(Path(directory) / "cp")
+            self.assertEqual(store.slots, 2)
+            self.assertEqual(len(store.slot_paths), 2)
+            self.assertEqual(
+                sorted(p.name for p in store.slot_paths),
+                ["slot-a.cont", "slot-b.cont"],
+            )
 
 
 class RotationTests(unittest.TestCase):
@@ -586,50 +599,84 @@ class SchedulerTests(unittest.TestCase):
                 )
 
 
+class SafePointClock:
+    """A monotonic clock that advances once per read, not with wall time.
+
+    The behaviour under test is "a checkpoint happens every N safe points and
+    the program keeps going", which has nothing to do with how fast the host
+    is. Driving the scheduler from real time made these tests depend on the
+    workload outlasting a real interval, which is exactly what failed on the
+    Windows runner: the program finished before 1ms elapsed and committed once
+    or not at all. This makes the number of checkpoints a function of the
+    program, identical on every host and interpreter, with no sleeping.
+    """
+
+    def __init__(self, step: float = 1.0):
+        self.step = step
+        self.reads = 0
+
+    def __call__(self) -> float:
+        value = self.reads * self.step
+        self.reads += 1
+        return value
+
+
 class NonTerminatingExecutionTests(unittest.TestCase):
+    def _run_with_deterministic_clock(self, directory: Path, interval: float = 8.0):
+        store = CheckpointStore(directory)
+        scheduler = CheckpointScheduler(
+            store, SOURCE, lineage_id="lin", interval_seconds=interval,
+            clock=SafePointClock(),
+        )
+        vm = VirtualMachine(
+            compile_source(SOURCE, "checkpoint_test.py"),
+            ["checkpoint_test.py"],
+            "checkpoint_test.py",
+            safe_point_callback=scheduler.on_safe_point,
+        )
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            vm.run()
+        return store, scheduler, vm, output.getvalue()
+
     def test_the_program_runs_to_completion_while_checkpointing(self):
         """The defining property: checkpointing must not end the program."""
 
         with TemporaryDirectory() as directory:
-            store = CheckpointStore(Path(directory) / "cp")
-            scheduler = CheckpointScheduler(
-                store, SOURCE, lineage_id="lin", interval_seconds=MIN_INTERVAL_SECONDS,
+            _store, scheduler, vm, _out = self._run_with_deterministic_clock(
+                Path(directory) / "cp"
             )
-            vm = VirtualMachine(
-                compile_source(SOURCE, "checkpoint_test.py"),
-                ["checkpoint_test.py"],
-                "checkpoint_test.py",
-                safe_point_callback=scheduler.on_safe_point,
-            )
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                vm.run()
             self.assertTrue(vm.completed)
             self.assertEqual(vm.globals["answer"], sum(range(400)))
+            # Deterministic: the clock advances per safe point, so this count
+            # is a property of the program, not of the host's speed.
             self.assertGreater(scheduler.status.commits, 1)
+
+    def test_multiple_checkpoints_commit_with_monotonic_generations(self):
+        with TemporaryDirectory() as directory:
+            store, scheduler, _vm, _out = self._run_with_deterministic_clock(
+                Path(directory) / "cp"
+            )
+            generations = [item.generation for item in scheduler.history]
+            self.assertGreater(len(generations), 1)
+            self.assertEqual(generations, sorted(set(generations)))
+            self.assertEqual(generations[0], 1)
+            self.assertEqual(
+                store.recover().selected.generation, generations[-1]
+            )
 
     def test_no_instruction_is_replayed_during_normal_execution(self):
         """Every STEP appears exactly once despite many checkpoints."""
 
         with TemporaryDirectory() as directory:
-            store = CheckpointStore(Path(directory) / "cp")
-            scheduler = CheckpointScheduler(
-                store, SOURCE, lineage_id="lin", interval_seconds=MIN_INTERVAL_SECONDS,
+            _store, scheduler, vm, out = self._run_with_deterministic_clock(
+                Path(directory) / "cp"
             )
-            vm = VirtualMachine(
-                compile_source(SOURCE, "checkpoint_test.py"),
-                ["checkpoint_test.py"],
-                "checkpoint_test.py",
-                safe_point_callback=scheduler.on_safe_point,
-            )
-            output = io.StringIO()
-            with contextlib.redirect_stdout(output):
-                vm.run()
             steps = [
-                line for line in output.getvalue().splitlines()
-                if line.startswith("STEP ")
+                line for line in out.splitlines() if line.startswith("STEP ")
             ]
             self.assertGreater(scheduler.status.commits, 1)
+            self.assertTrue(vm.completed)
             self.assertEqual(len(steps), 400)
             self.assertEqual(len(set(steps)), 400)
 

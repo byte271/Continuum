@@ -13,7 +13,7 @@ from continuum import cli
 from continuum.checkpoint import (
     FAILURE_CONTINUE,
     FAILURE_TERMINATE,
-    MIN_SLOTS,
+    SLOT_COUNT,
     CheckpointStore,
 )
 from continuum.compiler import compile_source
@@ -34,7 +34,22 @@ answer = work(50)
 """
 
 
-def seeded_directory(root: Path, *, generations: int = 2) -> CheckpointStore:
+def _seed_extra_lineage(store: CheckpointStore, lineage: str) -> None:
+    vm = VirtualMachine(
+        compile_source(SOURCE, "cli_test.py"), ["cli_test.py"], "cli_test.py"
+    )
+    with contextlib.redirect_stdout(io.StringIO()):
+        while len(vm.frames) < 2 or vm.frames[-1].locals.get("index") != 3:
+            vm.step()
+    store.commit(
+        vm, SOURCE, lineage_id=lineage, generation=9,
+        previous_generation=None, requested_interval_seconds=0.25,
+    )
+
+
+def seeded_directory(
+    root: Path, *, generations: int = 2, lineage: str = "lin-cli"
+) -> CheckpointStore:
     store = CheckpointStore(root / "cp")
     vm = VirtualMachine(
         compile_source(SOURCE, "cli_test.py"), ["cli_test.py"], "cli_test.py"
@@ -46,7 +61,7 @@ def seeded_directory(root: Path, *, generations: int = 2) -> CheckpointStore:
         store.commit(
             vm,
             SOURCE,
-            lineage_id="lin-cli",
+            lineage_id=lineage,
             generation=generation,
             previous_generation=generation - 1 or None,
             requested_interval_seconds=0.25,
@@ -77,7 +92,7 @@ class ParserBackwardsCompatibilityTests(unittest.TestCase):
                 "run",
                 "--checkpoint-dir", "cps",
                 "--checkpoint-interval", "100ms",
-                "--checkpoint-slots", "3",
+                "--checkpoint-slots", "2",
                 "--checkpoint-failure", "terminate",
                 "program.py",
                 "extra",
@@ -85,14 +100,14 @@ class ParserBackwardsCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(args.checkpoint_dir, "cps")
         self.assertEqual(args.checkpoint_interval, "100ms")
-        self.assertEqual(args.checkpoint_slots, 3)
+        self.assertEqual(args.checkpoint_slots, SLOT_COUNT)
         self.assertEqual(args.checkpoint_failure, FAILURE_TERMINATE)
         self.assertEqual(args.arguments, ["extra"])
 
     def test_defaults_are_conservative(self):
         args = cli._parser().parse_args(["run", "program.py"])
         self.assertEqual(args.checkpoint_interval, "1s")
-        self.assertEqual(args.checkpoint_slots, MIN_SLOTS)
+        self.assertEqual(args.checkpoint_slots, SLOT_COUNT)
         self.assertEqual(args.checkpoint_failure, FAILURE_CONTINUE)
 
     def test_every_pre_existing_command_still_parses(self):
@@ -116,6 +131,99 @@ class ParserBackwardsCompatibilityTests(unittest.TestCase):
         with self.assertRaises(ContinuumError) as caught:
             cli._run(args)
         self.assertIn("--recover-latest requires", str(caught.exception))
+
+
+class SlotCountTests(unittest.TestCase):
+    def test_a_non_default_slot_count_is_refused_by_run(self):
+        """`recover` cannot discover another count, so `run` must not offer one."""
+
+        for value in ("1", "3", "8"):
+            with self.subTest(value=value):
+                args = cli._parser().parse_args(
+                    ["run", "--checkpoint-dir", "cps",
+                     "--checkpoint-slots", value, "p.py"]
+                )
+                with self.assertRaises(ContinuumError) as caught:
+                    cli.open_checkpoint_store(args)
+                self.assertIn("exactly 2", str(caught.exception))
+
+    def test_run_recover_and_checkpoints_agree_on_the_slot_count(self):
+        with TemporaryDirectory() as directory:
+            store = seeded_directory(Path(directory))
+            self.assertEqual(store.slots, SLOT_COUNT)
+            args = cli._parser().parse_args(
+                ["checkpoints", str(store.directory), "--json"]
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                cli._checkpoints(args)
+            self.assertEqual(json.loads(output.getvalue())["slot_count"], SLOT_COUNT)
+
+
+class RecoveryRefusalCliTests(unittest.TestCase):
+    """--recover-latest must never silently restart from the beginning."""
+
+    def _run_args(self, directory: Path, program: Path):
+        return cli._parser().parse_args(
+            ["run", "--checkpoint-dir", str(directory), "--recover-latest",
+             str(program)]
+        )
+
+    def _program(self, root: Path) -> Path:
+        path = root / "prog.py"
+        path.write_text(SOURCE, encoding="utf-8")
+        return path
+
+    def test_corrupt_directory_refuses_instead_of_starting_over(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            checkpoints = root / "cp"
+            checkpoints.mkdir()
+            (checkpoints / "slot-a.cont").write_bytes(b"broken")
+            stderr = io.StringIO()
+            args = self._run_args(checkpoints, self._program(root))
+            with contextlib.redirect_stderr(stderr):
+                store, _interval = cli.open_checkpoint_store(args)
+                with self.assertRaises(ContinuumError) as caught:
+                    cli.resolve_recovery(store, True)
+            message = str(caught.exception)
+            self.assertIn("refusing to start from", message)
+            self.assertIn("corrupt", message)
+            self.assertIn("refused", stderr.getvalue())
+
+    def test_ambiguous_lineage_refuses_instead_of_starting_over(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = seeded_directory(root, generations=1, lineage="lin-a")
+            _seed_extra_lineage(store, "lin-b")
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(ContinuumError) as caught:
+                    cli.resolve_recovery(store, True)
+            self.assertIn("ambiguous-lineage", str(caught.exception))
+
+    def test_an_empty_directory_starts_fresh_without_error(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            empty = root / "cp"
+            empty.mkdir()
+            stderr = io.StringIO()
+            args = self._run_args(empty, self._program(root))
+            with contextlib.redirect_stderr(stderr):
+                store, _interval = cli.open_checkpoint_store(args)
+                self.assertIsNone(cli.resolve_recovery(store, True))
+            self.assertIn("starting from the beginning", stderr.getvalue())
+
+    def test_a_foreign_lineage_directory_refuses_a_fresh_run(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = seeded_directory(root, generations=1, lineage="lin-old")
+            with self.assertRaises(ContinuumError) as caught:
+                store.claim_for_new_lineage("lin-brand-new")
+            message = str(caught.exception)
+            self.assertIn("already holds committed checkpoints", message)
+            self.assertIn("lin-old", message)
+            # Nothing was destroyed by the refusal.
+            self.assertEqual(store.recover().selected.generation, 1)
 
 
 class CheckpointsCommandTests(unittest.TestCase):

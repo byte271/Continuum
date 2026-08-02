@@ -147,11 +147,25 @@ with it. That is not the same as having been proven: no checkpoint image has
 been moved between hosts and resumed by a proof workflow, so **cross-platform
 rolling recovery is not claimed**.
 
-**How much progress a crash can cost.** At most one checkpoint interval of
-execution, plus the time to reach the next safe point, plus commit time. Work
-performed after the last committed generation is re-executed on recovery. This
-is visible and expected: in the end-to-end test the recovered process re-emits
-the markers produced between the last commit and the kill.
+**How much progress a crash can cost.** *Provided due checkpoints keep
+committing successfully*, roughly one checkpoint interval of execution, plus the
+time to reach the next safe point, plus commit time. Work performed after the
+last committed generation is re-executed on recovery. This is visible and
+expected: in the end-to-end test the recovered process re-emits the markers
+produced between the last commit and the kill.
+
+**That bound is not unconditional.** The default `--checkpoint-failure continue`
+keeps the program running when a commit fails -- a full disk, a permission
+change, a value the graph codec cannot encode. Every failure is reported loudly
+on stderr and surfaced by `continuum checkpoints` as `last_error`, but the
+program does not stop, so the newest valid generation can be **much** older than
+one interval. Nothing in Continuum bounds how far behind it drifts. Monitor the
+failure count, or choose `--checkpoint-failure terminate`.
+
+**There is no fallback before the first commit.** A new checkpoint directory
+holds no valid generation until one checkpoint has committed. The two-slot
+guarantee -- that a previously committed checkpoint survives while the next one
+is written -- begins after the first successful commit, not before it.
 
 **The newest checkpoint can be lost; an older one should remain.** If the
 process dies mid-commit, the temporary file is discarded and the previously

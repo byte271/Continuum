@@ -110,8 +110,13 @@ has no Windows job.
   the manual terminating `freeze`, which is unchanged. Two-slot rotation with
   monotonic generations; selection reads only generation and lineage from
   inside the authenticated container, never filenames, mtimes, or an external
-  pointer file. Verified on Linux x86_64 under a real `SIGKILL`; see
-  `LIMITATIONS.md` for what is and is not proven per platform.
+  pointer file. Exactly two slots: a different count cannot be discovered
+  safely at recovery time and is refused. Maximum lost progress is about one
+  interval **only while commits keep succeeding**; under the default
+  continue-on-failure policy the newest valid generation can be far older, and
+  the failure is reported rather than bounded. Verified on Linux x86_64 under a
+  real `SIGKILL`; see `LIMITATIONS.md` for what is and is not proven per
+  platform.
 - Public `run`, `sessions`, `freeze`, `inspect`, `verify`, `resume`, `recover`,
   `checkpoints`, `doctor`, `demo`, `plan-upgrade`, `inspect-upgrade`,
   `verify-upgrade`, and `--version`.
@@ -123,7 +128,7 @@ has no Windows job.
   two earlier rates are Linux x86_64; the suite exercises two corpus programs
   through all four gates on every host. `COMPATIBILITY.md` holds the per-gate
   breakdown.
-- Current full suite: 484 tests discovered. Tests skip only where the host
+- Current full suite: 530 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

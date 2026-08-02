@@ -16,14 +16,50 @@ import io
 import json
 import platform
 import statistics
+import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 from continuum import __version__
+from continuum.abi import VERIFIED_PYTHON_VERSIONS
 from continuum.checkpoint import CheckpointScheduler, CheckpointStore
 from continuum.compiler import compile_source
 from continuum.vm import VirtualMachine
+
+
+def require_verified_interpreter() -> None:
+    """Refuse to measure on an interpreter the runtime has not verified.
+
+    Published performance figures have to come from an interpreter this project
+    actually supports, or they describe something nobody can run. The allowlist
+    is read from `continuum.abi` rather than repeated here, so it cannot drift
+    from the runtime's own gate.
+    """
+
+    current = platform.python_version()
+    if current not in VERIFIED_PYTHON_VERSIONS:
+        raise SystemExit(
+            f"refusing to benchmark on unverified CPython {current}; "
+            f"verified versions are {list(VERIFIED_PYTHON_VERSIONS)}. "
+            "Numbers from an unverified interpreter must not be published."
+        )
+
+
+def _commit_sha() -> str | None:
+    """Record which tree produced the numbers, when git can tell us."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
 
 # Small, flat state: the cheapest realistic checkpoint.
 SMALL_STATE = """
@@ -88,18 +124,28 @@ def _run_workload(source: str, directory: Path, interval: float) -> dict:
     with contextlib.redirect_stdout(io.StringIO()):
         vm.run()
     wall = time.perf_counter() - started
+    # `history` is bounded (HISTORY_LIMIT); the aggregate counts below come
+    # from `status`, which keeps lifetime totals, so a long run cannot make
+    # these figures silently describe only the tail.
     pauses = [item.pause_seconds for item in scheduler.history]
     commits = [item.commit_seconds for item in scheduler.history]
     sizes = [item.image_bytes for item in scheduler.history]
+    serialization = [item.serialization_seconds for item in scheduler.history]
+    publish = [item.durable_publish_seconds for item in scheduler.history]
     return {
         "requested_interval_seconds": interval,
         "wall_seconds": wall,
         "checkpoints_committed": len(scheduler.history),
         "coalesced_ticks": scheduler.status.coalesced_ticks,
         "failures": scheduler.status.failures,
+        # The complete stop-the-world pause: serialization, flush, rename, and
+        # directory flush. The phase breakdowns are separate fields.
         "pause_seconds": _summary(pauses),
-        "commit_seconds": _summary(commits),
+        "durable_commit_seconds": _summary(commits),
+        "serialization_seconds": _summary(serialization),
+        "durable_publish_seconds": _summary(publish),
         "image_bytes": _summary(sizes),
+        "history_records_retained": len(scheduler.history),
         "bytes_written_total": sum(sizes),
         # Every checkpoint rewrites the whole image, so amplification is the
         # total written divided by what one image costs. This is the cost the
@@ -181,6 +227,7 @@ def _summary(values: list[float]) -> dict | None:
 
 
 def main() -> int:
+    require_verified_interpreter()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--iterations", type=int, default=20000)
     parser.add_argument(
@@ -195,6 +242,7 @@ def main() -> int:
     intervals = [parse_interval(item) for item in arguments.intervals.split(",")]
     report = {
         "continuum_version": __version__,
+        "commit_sha": _commit_sha(),
         "python_version": platform.python_version(),
         "python_implementation": platform.python_implementation(),
         "system": platform.system(),

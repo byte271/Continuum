@@ -82,12 +82,24 @@ Three deliberate decisions:
   exactly; an unknown value is refused rather than partially interpreted, so a
   future revision cannot be silently misread by this runtime.
 
-When present the block is structurally validated on both write and read:
-`generation` must be a positive integer (and `True` does not qualify),
-`previous_generation` must be `null` or strictly less than `generation`,
-`lineage_id` must be a bounded alphanumeric token, `requested_interval_seconds`
-must be in range, and `directory_fsync` must be one of the two known states.
-A malformed block makes the whole image invalid.
+When present the block is structurally validated on both write and read. Every
+field is checked; the list below is exactly what the implementation enforces:
+
+| Field | Rule |
+| --- | --- |
+| `checkpoint_format_version` | must equal `"1"`; any other value is refused rather than partially interpreted |
+| `mode` | must be a known mode (currently only `"periodic"`) |
+| `lineage_id` | 1 to 128 characters from `A-Z`, `a-z`, `0-9`, `-`, `_`. **ASCII only** -- Unicode letters, Arabic-Indic digits, bidirectional controls, whitespace, `/`, and `.` are all refused, so two lineages cannot look identical in operator output while differing |
+| `generation` | positive integer; `True` does not qualify as `1` |
+| `previous_generation` | `null`, or a positive integer strictly less than `generation` |
+| `created_at` | string, 1 to 64 characters |
+| `requested_interval_seconds` | number in `(0, 86400]`; booleans refused |
+| `durability.file_fsync` | must be exactly `true` |
+| `durability.directory_fsync` | `"supported"` or `"unsupported-on-platform"` |
+
+A malformed block makes the whole image invalid. The slot count is deliberately
+**not** recorded here: it is fixed at two, so there is nothing to disagree about
+between the writer and a recovering reader.
 
 ## IR
 
