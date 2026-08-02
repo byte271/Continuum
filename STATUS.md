@@ -128,7 +128,7 @@ has no Windows job.
   two earlier rates are Linux x86_64; the suite exercises two corpus programs
   through all four gates on every host. `COMPATIBILITY.md` holds the per-gate
   breakdown.
-- Current full suite: 533 tests discovered. Tests skip only where the host
+- Current full suite: 535 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

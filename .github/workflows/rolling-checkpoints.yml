@@ -155,7 +155,8 @@ jobs:
                       f"{name} {interval}: commits={measured['checkpoints_committed']} "
                       f"coalesced={measured['coalesced_ticks']} "
                       f"pause_median_ms={pause['median'] * 1000:.1f} "
-                      f"amp={measured['write_amplification']:.1f}x"
+                      f"amp_in_window="
+                      f"{measured['write_amplification_in_history_window']:.1f}x"
                   )
                   assert measured["failures"] == 0, measured
           PY

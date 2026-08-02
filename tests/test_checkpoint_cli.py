@@ -304,5 +304,66 @@ class CheckpointsCommandTests(unittest.TestCase):
             self.assertTrue(broken[0]["reason"])
 
 
+
+class BenchmarkReportSchemaTests(unittest.TestCase):
+    """The CI summary step must not read keys the benchmark stopped emitting.
+
+    Renaming a report field twice broke the `checkpoint benchmark` job at a
+    point where nothing else would have caught it: the benchmark refuses to run
+    on an unverified interpreter, so the failure only appeared in CI. This
+    compares what the workflow reads against what the module declares it
+    writes, which needs neither a verified interpreter nor a real measurement.
+    """
+
+    def _workflow_text(self) -> str:
+        path = (
+            Path(__file__).resolve().parents[1]
+            / ".github" / "workflows" / "rolling-checkpoints.yml"
+        )
+        return path.read_text(encoding="utf-8")
+
+    def test_declared_keys_match_what_the_module_actually_emits(self):
+        import ast
+
+        source = (
+            Path(__file__).resolve().parents[1]
+            / "benchmarks" / "measure_checkpoints.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        emitted = None
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name == "_run_workload"
+            ):
+                for inner in ast.walk(node):
+                    if isinstance(inner, ast.Return) and isinstance(
+                        inner.value, ast.Dict
+                    ):
+                        emitted = {
+                            key.value
+                            for key in inner.value.keys
+                            if isinstance(key, ast.Constant)
+                        }
+        self.assertIsNotNone(emitted, "could not find the report dict")
+        from benchmarks.measure_checkpoints import INTERVAL_REPORT_KEYS
+
+        # `recovery` is attached by main() after the workload runs, so it is in
+        # the report but not in this function's return literal.
+        self.assertEqual(emitted | {"recovery"}, set(INTERVAL_REPORT_KEYS))
+
+    def test_the_workflow_only_reads_keys_the_report_contains(self):
+        import re
+
+        from benchmarks.measure_checkpoints import INTERVAL_REPORT_KEYS
+
+        read = set(re.findall(r"measured\[['\"]([a-z_]+)['\"]\]", self._workflow_text()))
+        self.assertTrue(read, "found no report reads in the workflow")
+        missing = read - set(INTERVAL_REPORT_KEYS)
+        self.assertEqual(
+            missing, set(),
+            f"the workflow reads keys the benchmark does not emit: {sorted(missing)}",
+        )
+
 if __name__ == "__main__":
     unittest.main()

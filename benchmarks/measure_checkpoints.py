@@ -112,6 +112,29 @@ def work(limit, width):
 answer = work(%d, %d)
 """
 
+# The keys `_run_workload` puts in each interval entry. Declared so the CI
+# summary step -- and anything else reading the report -- can be checked
+# against it, instead of discovering a rename when the job fails.
+INTERVAL_REPORT_KEYS = frozenset({
+    "requested_interval_seconds",
+    "wall_seconds",
+    "checkpoints_committed",
+    "history_window_records",
+    "coalesced_ticks",
+    "failures",
+    "pause_seconds",
+    "durable_commit_seconds",
+    "serialization_seconds",
+    "file_flush_seconds",
+    "durable_publish_seconds",
+    "image_bytes",
+    "bytes_written_in_history_window",
+    "write_amplification_in_history_window",
+    "safe_points_executed",
+    "instructions_executed",
+    "recovery",
+})
+
 WORKLOADS = {
     "small-state": lambda iterations: SMALL_STATE % iterations,
     "large-graph": lambda iterations: LARGE_GRAPH % (iterations, 400),
