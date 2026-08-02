@@ -64,8 +64,11 @@ indistinguishable at this workload size.
 
 One host, one workload, one architecture. Nothing on this page was measured on
 macOS arm64 or Windows x86_64, and no figure should be quoted for those hosts.
-No workflow runs these benchmarks, so performance can still regress silently
-between releases; wiring them into CI is not done.
+No workflow runs *these* benchmarks -- the runtime and migration measurements
+above -- so they can still regress silently between releases; wiring them into
+CI is not done. The rolling-checkpoint benchmark is the exception: it runs in
+`rolling-checkpoints.yml` on every pull request. See the checkpoint section
+below.
 
 ## Historical measurements (0.1.1.dev0, IR 0.2)
 
@@ -204,3 +207,44 @@ The later signal/Boolean change above removed request-path polling from idle
 safe points without changing checkpoint image contents.
 
 No native extension, JIT, or architecture-specific acceleration was added.
+
+## Rolling checkpoints
+
+**No verified checkpoint measurements are published yet.**
+
+An earlier revision of this section quoted figures produced under CPython
+3.12.3. That interpreter is not in `abi.VERIFIED_PYTHON_VERSIONS`, so those
+numbers described something this runtime refuses to run and have been
+withdrawn rather than annotated. They are not reproduced here, and
+`benchmarks/measure_checkpoints.py` now refuses to start on an interpreter
+outside the runtime's own allowlist, so the same mistake cannot be repeated.
+
+They would also have been wrong for a second reason: `pause_seconds` at the
+time stopped measuring before the rename and the directory flush, which
+understated the real stop-the-world pause. It now covers the whole commit, with
+`serialization_seconds`, `file_flush_seconds`, and `durable_publish_seconds`
+reported separately.
+
+### Where the numbers come from
+
+The `checkpoint benchmark (ubuntu-24.04)` job in `rolling-checkpoints.yml` runs
+`measure_checkpoints.py` on exact CPython 3.12.13 and uploads
+`checkpoint-benchmark-<run-id>.json` as a build artifact. The report records the
+commit SHA, interpreter, platform, requested interval, committed and coalesced
+tick counts, the complete pause, the durable-commit duration, phase
+breakdowns, image size, write amplification, and recovery validation time.
+
+Runner figures are shared-tenant and noisy. Publishing a table here requires a
+measurement taken deliberately on known hardware, on a verified interpreter,
+and recorded with its environment -- not a number copied out of a CI log.
+
+**Nothing has been measured on macOS or Windows.** Linux figures must not be
+generalised to either; the Windows durability path in particular does not flush
+the directory entry at all (`LIMITATIONS.md`).
+
+### What is known without measurement
+
+Every checkpoint writes a complete image, including any bundled read-only
+resources, so write amplification is total and grows linearly with the
+checkpoint count. There is no incremental format; `LIMITATIONS.md` explains why
+sharing blobs between slots was rejected.

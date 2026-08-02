@@ -35,6 +35,16 @@ from ._harness import (
     wait_for_ready as harness_wait_for_ready,
     wait_for_request as harness_wait_for_request,
 )
+from .checkpoint import (
+    FAILURE_CONTINUE,
+    FAILURE_POLICIES,
+    OUTCOME_EMPTY,
+    SLOT_COUNT,
+    CheckpointScheduler,
+    CheckpointStore,
+    parse_interval,
+    parse_slots,
+)
 from .compiler import compile_source
 from .errors import ContinuumError, FrozenExecution
 from .image import TARGET_PLATFORMS, inspect_image, load_image, verify_image
@@ -98,6 +108,44 @@ def _format_compatible_targets() -> tuple[str, ...]:
     )
 
 
+def _add_checkpoint_arguments(parser: argparse.ArgumentParser) -> None:
+    """Attach the rolling-checkpoint options.
+
+    All default to off. A run without --checkpoint-dir behaves exactly as it did
+    before this feature existed, including producing no checkpoint directory.
+    """
+
+    parser.add_argument(
+        "--checkpoint-dir",
+        default=None,
+        metavar="DIR",
+        help="enable rolling crash-recovery checkpoints in DIR",
+    )
+    parser.add_argument(
+        "--checkpoint-interval",
+        default="1s",
+        metavar="DURATION",
+        help="requested interval between checkpoints, such as 100ms, 1s, 5s "
+        "(default: 1s). A target, not a guarantee: a checkpoint that takes "
+        "longer than the interval delays the next one rather than overlapping.",
+    )
+    parser.add_argument(
+        "--checkpoint-slots",
+        type=int,
+        default=SLOT_COUNT,
+        metavar="N",
+        help=f"committed checkpoint slots; must be {SLOT_COUNT} "
+        "(accepted for explicitness, other values are refused)",
+    )
+    parser.add_argument(
+        "--checkpoint-failure",
+        choices=FAILURE_POLICIES,
+        default=FAILURE_CONTINUE,
+        help="what to do when a checkpoint cannot be committed "
+        f"(default: {FAILURE_CONTINUE})",
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="continuum",
@@ -114,10 +162,51 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--file-policy", choices=("strict", "bundle"), default="strict"
     )
+    _add_checkpoint_arguments(run)
+    run.add_argument(
+        "--recover-latest",
+        action="store_true",
+        help="resume from the newest valid checkpoint in --checkpoint-dir if one exists",
+    )
     run.add_argument("program")
     run.add_argument("arguments", nargs=argparse.REMAINDER)
 
     subparsers.add_parser("sessions", help="list known Continuum sessions")
+
+    recover = subparsers.add_parser(
+        "recover",
+        help="resume the newest valid checkpoint in a checkpoint directory",
+    )
+    recover.add_argument("checkpoint_dir")
+    recover.add_argument(
+        "--file-policy", choices=("strict", "relocate", "bundle"), default=None
+    )
+    recover.add_argument(
+        "--relocate",
+        action="append",
+        default=[],
+        metavar="OLD=NEW",
+        help="map an original absolute file path to a target path",
+    )
+    recover.add_argument(
+        "--lineage",
+        default=None,
+        help="require this lineage identifier instead of inferring it",
+    )
+    recover.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="report the selection without resuming execution",
+    )
+
+    checkpoints = subparsers.add_parser(
+        "checkpoints",
+        help="report the state of a checkpoint directory",
+    )
+    checkpoints.add_argument("checkpoint_dir")
+    checkpoints.add_argument(
+        "--json", action="store_true", help="emit machine-readable JSON"
+    )
 
     doctor = subparsers.add_parser(
         "doctor", help="report runtime identity and compatibility"
@@ -201,6 +290,10 @@ def main(argv: list[str] | None = None) -> int:
             return _run(args)
         if args.command == "sessions":
             return _sessions()
+        if args.command == "recover":
+            return _recover(args)
+        if args.command == "checkpoints":
+            return _checkpoints(args)
         if args.command == "doctor":
             return _doctor(args)
         if args.command == "demo":
@@ -246,24 +339,128 @@ def _require_runtime_version() -> None:
         )
 
 
+def open_checkpoint_store(args: argparse.Namespace):
+    """Validate the checkpoint options and open the store, or return no store.
+
+    Separated from `_run` so the option and directory semantics can be tested
+    directly without also driving a whole program through the runtime.
+    """
+
+    checkpoint_dir = getattr(args, "checkpoint_dir", None)
+    if checkpoint_dir is None:
+        return None, 0.0
+    interval = parse_interval(args.checkpoint_interval)
+    store = CheckpointStore(
+        checkpoint_dir, slots=parse_slots(args.checkpoint_slots)
+    )
+    # An interrupted commit can leave a temporary file behind. It is never a
+    # recovery candidate, but removing it here keeps the directory bounded.
+    for name in store.cleanup_temporaries():
+        print(
+            f"Removed stale checkpoint temporary: {name}",
+            file=sys.stderr,
+            flush=True,
+        )
+    return store, interval
+
+
+def resolve_recovery(store, recover_latest: bool):
+    """Decide what --recover-latest does, and refuse to guess.
+
+    Only a genuinely empty directory permits starting from the beginning. Any
+    other refusal -- corruption, an ambiguous lineage, a duplicated generation
+    -- means state exists that the operator asked to resume, and silently
+    running the program from its entry point would discard it.
+    """
+
+    if store is None or not recover_latest:
+        return None
+    result = store.recover()
+    if result.selected is not None:
+        _report_recovery_selection(result)
+        return result
+    if result.outcome == OUTCOME_EMPTY:
+        print(
+            f"No checkpoint in {store.directory}; starting from the beginning.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return None
+    for refusal in result.refusals:
+        print(f"  refused {refusal}", file=sys.stderr, flush=True)
+    raise ContinuumError(
+        f"--recover-latest found no usable checkpoint in {store.directory} "
+        f"({result.outcome}); refusing to start from the beginning. Inspect it "
+        "with `continuum checkpoints`, or point at an empty directory to start "
+        "fresh."
+    )
+
+
 def _run(args: argparse.Namespace) -> int:
+    # Argument validation first: a malformed invocation should say so plainly
+    # rather than be masked by an interpreter message. It creates no execution
+    # state, so it does not weaken the gate below.
+    checkpoint_dir = getattr(args, "checkpoint_dir", None)
+    recover_latest = getattr(args, "recover_latest", False)
+    if recover_latest and not checkpoint_dir:
+        raise ContinuumError("--recover-latest requires --checkpoint-dir")
     _require_runtime_version()
     path = Path(args.program).expanduser().resolve()
     try:
         source = path.read_text(encoding="utf-8")
     except OSError as exc:
         raise ContinuumError(f"cannot read {path}: {exc}") from exc
+
+    store, interval = open_checkpoint_store(args)
+    scheduler = None
+    resumed = resolve_recovery(store, recover_latest)
     ir = compile_source(source, str(path))
     controller = SessionController(source, str(path))
     safe_point_callback = harness_safe_point_callback(controller)
     controller.start()
-    vm = VirtualMachine(
-        ir,
-        [str(path), *args.arguments],
-        str(path),
-        resource_policy=args.file_policy,
-        safe_point_callback=safe_point_callback,
-    )
+    if resumed is not None:
+        loaded = load_image(resumed.selected.path)
+        if loaded.manifest["entry_program_sha256"] != _sha256_text(source):
+            raise ContinuumError(
+                "checkpoint was produced by a different program than "
+                f"{path}; refusing to resume it against changed source"
+            )
+        vm = loaded.restore_vm(
+            args.file_policy, None, safe_point_callback
+        )
+    else:
+        vm = VirtualMachine(
+            ir,
+            [str(path), *args.arguments],
+            str(path),
+            resource_policy=args.file_policy,
+            safe_point_callback=safe_point_callback,
+        )
+    if store is not None:
+        lineage = (
+            resumed.lineage_id if resumed is not None else controller.session_id
+        )
+        if resumed is None:
+            # A fresh lineage must not move into a directory another session
+            # owns: it would overwrite only its own slot forever while the
+            # foreign ones sat there making recovery permanently ambiguous.
+            store.claim_for_new_lineage(lineage)
+        scheduler = CheckpointScheduler(
+            store,
+            source,
+            lineage_id=lineage,
+            interval_seconds=interval,
+            failure_policy=args.checkpoint_failure,
+            on_event=_checkpoint_event_reporter(),
+        )
+        controller.attach_checkpoints(scheduler)
+        print(
+            f"Checkpoints: every {args.checkpoint_interval} into "
+            f"{store.directory} ({store.slots} slots, lineage {lineage}, "
+            f"on failure: {args.checkpoint_failure})",
+            file=sys.stderr,
+            flush=True,
+        )
     print(f"Continuum session: {controller.session_id}", file=sys.stderr, flush=True)
     try:
         vm.run()
@@ -273,8 +470,176 @@ def _run(args: argparse.Namespace) -> int:
     except BaseException as exc:
         controller.finish("failed", str(exc))
         raise
+    finally:
+        # Stopping is safe here and only here: commits are synchronous, so
+        # control never reaches this point with a checkpoint half written.
+        if scheduler is not None:
+            scheduler.stop()
     controller.finish("completed")
     return 0
+
+
+def _sha256_text(text: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _checkpoint_event_reporter():
+    def report(event: str, payload: dict[str, Any]) -> None:
+        if event == "checkpoint-committed":
+            durable = "durable" if payload["durable"] else "file-flushed-only"
+            print(
+                f"Checkpoint {payload['generation']} -> {payload['slot']} "
+                f"({payload['image_bytes']} bytes, pause "
+                f"{payload['pause_seconds'] * 1000:.1f}ms, commit "
+                f"{payload['commit_seconds'] * 1000:.1f}ms, {durable})",
+                file=sys.stderr,
+                flush=True,
+            )
+        elif event == "checkpoint-failed":
+            # Loud by default: a silent checkpoint failure is how a user ends up
+            # believing they have recovery when they do not.
+            print(
+                f"continuum: checkpoint failed: {payload['error']}",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    return report
+
+
+def _report_recovery_selection(result: Any) -> None:
+    selected = result.selected
+    print(
+        f"Recovering generation {selected.generation} from {selected.slot} "
+        f"(lineage {selected.lineage_id}, written {selected.created_at})",
+        file=sys.stderr,
+        flush=True,
+    )
+    for refusal in result.refusals:
+        print(f"  refused {refusal}", file=sys.stderr, flush=True)
+
+
+def _recover(args: argparse.Namespace) -> int:
+    _require_runtime_version()
+    store = CheckpointStore(args.checkpoint_dir)
+    result = store.recover(lineage_id=args.lineage)
+    if result.selected is None:
+        for refusal in result.refusals:
+            print(f"  refused {refusal}", file=sys.stderr, flush=True)
+        # The category matters: an empty directory and a directory full of
+        # corrupt or conflicting state are very different operator problems.
+        raise ContinuumError(
+            f"no valid checkpoint found in {store.directory} "
+            f"({result.outcome})"
+        )
+    _report_recovery_selection(result)
+    if args.dry_run:
+        return 0
+    relocations = _parse_relocations(args.relocate)
+    # Reuse the audited restore path rather than a second loader.
+    loaded = load_image(result.selected.path)
+    loaded.validate_compatibility()
+    vm = loaded.restore_vm(args.file_policy, relocations)
+    source = loaded.manifest["source"]
+    print(
+        f"Restored from {source['os']} {source['architecture']}.",
+        file=sys.stderr,
+        flush=True,
+    )
+    vm.run()
+    return 0
+
+
+def _checkpoints(args: argparse.Namespace) -> int:
+    store = CheckpointStore(args.checkpoint_dir)
+    result = store.recover()
+    slots = []
+    for item in store.inspect_slots():
+        slots.append(
+            {
+                "slot": item.slot,
+                "present": item.present,
+                "valid": item.valid,
+                "generation": item.generation,
+                "lineage_id": item.lineage_id,
+                "created_at": item.created_at,
+                "previous_generation": item.previous_generation,
+                "directory_fsync": item.directory_fsync,
+                "reason": item.reason,
+            }
+        )
+    selected = result.selected
+    fallback = None
+    if selected is not None:
+        others = [
+            item
+            for item in store.inspect_slots()
+            if item.valid and item.slot != selected.slot
+        ]
+        if others:
+            fallback = max(others, key=lambda item: item.generation).slot
+    report = {
+        "directory": str(store.directory),
+        "slots": slots,
+        "slot_count": store.slots,
+        "active_slot": selected.slot if selected else None,
+        "fallback_slot": fallback,
+        "last_generation": selected.generation if selected else None,
+        "last_committed_at": selected.created_at if selected else None,
+        "lineage_id": result.lineage_id,
+        "requested_interval_seconds": None,
+        "directory_fsync": store.directory_fsync,
+        "outcome": result.outcome,
+        "refusals": list(result.refusals),
+    }
+    if selected is not None:
+        loaded = load_image(selected.path)
+        block = loaded.manifest["checkpoint"]
+        report["requested_interval_seconds"] = block["requested_interval_seconds"]
+    if args.json:
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0
+    print(f"Checkpoint directory: {report['directory']}")
+    print(f"Configured slots: {report['slot_count']}")
+    print(f"Lineage: {report['lineage_id'] or 'none'}")
+    print(f"Active slot: {report['active_slot'] or 'none'}")
+    print(f"Fallback slot: {report['fallback_slot'] or 'none'}")
+    print(f"Last committed generation: {report['last_generation'] or 'none'}")
+    print(f"Last committed at: {report['last_committed_at'] or 'none'}")
+    interval = report["requested_interval_seconds"]
+    print(
+        "Requested interval: "
+        + (f"{interval}s" if interval is not None else "unknown")
+    )
+    print(f"Directory flush: {report['directory_fsync']}")
+    print(f"Recovery outcome: {report['outcome']}")
+    for item in slots:
+        state = "valid" if item["valid"] else ("absent" if not item["present"] else "invalid")
+        detail = f" generation {item['generation']}" if item["valid"] else ""
+        reason = f" ({item['reason']})" if item["reason"] and not item["valid"] else ""
+        print(f"  {item['slot']}: {state}{detail}{reason}")
+    for refusal in report["refusals"]:
+        print(f"  refused {refusal}")
+    return 0
+
+
+def _parse_relocations(mappings: list[str]) -> dict[str, str]:
+    relocations = {}
+    for mapping in mappings:
+        if "=" not in mapping:
+            raise ContinuumError(f"invalid relocation {mapping!r}; expected OLD=NEW")
+        old, new = mapping.split("=", 1)
+        if not old or not new:
+            raise ContinuumError(f"invalid relocation {mapping!r}; expected OLD=NEW")
+        if not is_portable_absolute_path(old):
+            raise ContinuumError(
+                f"invalid relocation {mapping!r}; OLD must be an absolute "
+                "POSIX or Windows path"
+            )
+        relocations[old] = str(Path(new).expanduser().resolve())
+    return relocations
 
 
 def _sessions() -> int:

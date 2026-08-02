@@ -104,8 +104,22 @@ has no Windows job.
   alive through `OpenProcess`/`GetExitCodeProcess` instead of `kill(pid, 0)`.
   The protocol and the resulting image are unchanged; idle cost and freeze
   latency are not measured on Windows.
-- Public `run`, `sessions`, `freeze`, `inspect`, `verify`, `resume`, `doctor`,
-  `demo`, `plan-upgrade`, `inspect-upgrade`, `verify-upgrade`, and `--version`.
+- Rolling crash-recovery checkpoints: `continuum run --checkpoint-dir` commits
+  periodic images at safe points **without terminating the source process**,
+  and `continuum recover` resumes the newest valid generation. Distinct from
+  the manual terminating `freeze`, which is unchanged. Two-slot rotation with
+  monotonic generations; selection reads only generation and lineage from
+  inside the authenticated container, never filenames, mtimes, or an external
+  pointer file. Exactly two slots: a different count cannot be discovered
+  safely at recovery time and is refused. Maximum lost progress is about one
+  interval **only while commits keep succeeding**; under the default
+  continue-on-failure policy the newest valid generation can be far older, and
+  the failure is reported rather than bounded. Verified on Linux x86_64 under a
+  real `SIGKILL`; see `LIMITATIONS.md` for what is and is not proven per
+  platform.
+- Public `run`, `sessions`, `freeze`, `inspect`, `verify`, `resume`, `recover`,
+  `checkpoints`, `doctor`, `demo`, `plan-upgrade`, `inspect-upgrade`,
+  `verify-upgrade`, and `--version`.
 - `verify` validates compatibility, decodes the allowlisted graph, and
   reconstructs frames without opening resources or starting execution.
 - A 50-program unchanged-source differential corpus. Current IR 0.4 passes
@@ -114,7 +128,7 @@ has no Windows job.
   two earlier rates are Linux x86_64; the suite exercises two corpus programs
   through all four gates on every host. `COMPATIBILITY.md` holds the per-gate
   breakdown.
-- Current full suite: 420 tests discovered. Tests skip only where the host
+- Current full suite: 535 tests discovered. Tests skip only where the host
   lacks the mechanism under test: the native Apple Silicon test skips off
   macOS arm64, and POSIX signal notification, the shell installer, and the
   symlink launcher skip on Windows.

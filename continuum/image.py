@@ -43,6 +43,37 @@ REQUIRED_ENTRIES = {
 }
 STATIC_ENTRIES = REQUIRED_ENTRIES | {"SIGNATURE"}
 SUPPORTED_CAPABILITIES = abi.PROVIDED_CAPABILITIES
+
+# Periodic-checkpoint provenance lives in `manifest.json` rather than in a new
+# archive entry, so a checkpoint stays a normal inspectable Continuum image and
+# `STATIC_ENTRIES` is unchanged. `checksums.json` already covers the manifest,
+# so the generation and lineage below are authenticated by the container's
+# existing integrity check rather than by a separate trusted-metadata file.
+#
+# The block is versioned and optional. It carries provenance only: it never
+# affects the restore decision, so a runtime that predates it restores a
+# checkpoint image correctly by ignoring it, and a runtime that postdates it
+# can reason about the version rather than guessing at an unversioned field.
+CHECKPOINT_METADATA_VERSION = "1"
+CHECKPOINT_MODE_PERIODIC = "periodic"
+CHECKPOINT_MODES = {CHECKPOINT_MODE_PERIODIC}
+DIRECTORY_FSYNC_SUPPORTED = "supported"
+DIRECTORY_FSYNC_UNSUPPORTED = "unsupported-on-platform"
+DIRECTORY_FSYNC_STATES = {
+    DIRECTORY_FSYNC_SUPPORTED,
+    DIRECTORY_FSYNC_UNSUPPORTED,
+}
+# Explicit ASCII, not `str.isalnum()`. `isalnum()` accepts characters such as
+# `e-acute`, CJK ideographs, and Arabic-Indic digits, so two visually
+# indistinguishable lineage identifiers could be reported by
+# `continuum checkpoints` as if they were the same session. The value never
+# builds a path, so this is a legibility and confusability boundary rather than
+# a traversal one, but the accepted set should still be exactly what the
+# documentation says it is.
+LINEAGE_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "0123456789" "-_"
+)
+MAX_LINEAGE_LENGTH = 128
 # The target pairs this runtime will attempt to restore. Membership is a
 # format-compatibility decision only; it is never evidence that a source or
 # target platform has been exercised. PORTABILITY.md holds that evidence.
@@ -96,7 +127,18 @@ def save_image(
     source: str,
     source_os: str | None = None,
     source_architecture: str | None = None,
+    *,
+    checkpoint: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Write one Continuum image and durably replace `path`.
+
+    `checkpoint` attaches periodic-checkpoint provenance to the manifest. It is
+    keyword-only and defaults to None, so the manual freeze path and every
+    existing caller produce byte-identical images to before. Passing it does not
+    change what is captured or how the image restores -- only what the manifest
+    records about where the image came from.
+    """
+
     if vm.completed or not vm.frames:
         raise ImageError("cannot freeze a completed execution")
     validate_ir(vm.ir)
@@ -194,6 +236,12 @@ def save_image(
         },
         "security_boundary": "executable-untrusted-content",
     }
+    if checkpoint is not None:
+        # Validated on the way out as well as on the way in, so a malformed
+        # block is refused by the writer rather than committed and discovered
+        # later by a reader that is trying to recover from a crash.
+        _validate_checkpoint_metadata(checkpoint)
+        manifest["checkpoint"] = dict(checkpoint)
 
     entries: dict[str, bytes] = {
         "manifest.json": _json_bytes(manifest),
@@ -508,6 +556,71 @@ def _validate_contract_documents(
         raise ImageError("graph codec metadata is inconsistent")
 
 
+def _validate_checkpoint_metadata(block: Any) -> dict[str, Any]:
+    """Structurally validate the optional periodic-checkpoint manifest block.
+
+    Recovery selects between slots using `generation` and `lineage_id` from
+    here, so these fields are attacker-controlled input in exactly the way the
+    rest of the container is: they are covered by `checksums.json`, but a
+    checkpoint directory can still be handed a well-formed image whose block is
+    nonsense. Everything is therefore range- and type-checked before any
+    selection logic reads it, and an unknown block version is refused rather
+    than partially interpreted.
+    """
+
+    if not isinstance(block, dict):
+        raise ImageError("checkpoint metadata is not an object")
+    version = block.get("checkpoint_format_version")
+    if version != CHECKPOINT_METADATA_VERSION:
+        raise ImageError(
+            f"unsupported checkpoint metadata version: {version!r} is not "
+            f"{CHECKPOINT_METADATA_VERSION!r}"
+        )
+    if block.get("mode") not in CHECKPOINT_MODES:
+        raise ImageError(f"unknown checkpoint mode: {block.get('mode')!r}")
+    lineage = block.get("lineage_id")
+    if (
+        not isinstance(lineage, str)
+        or not 1 <= len(lineage) <= MAX_LINEAGE_LENGTH
+        or not set(lineage) <= LINEAGE_CHARACTERS
+    ):
+        raise ImageError("checkpoint lineage identifier is not a safe token")
+    generation = block.get("generation")
+    # bool is a subclass of int; True must not pass as generation 1.
+    if not isinstance(generation, int) or isinstance(generation, bool) or generation < 1:
+        raise ImageError("checkpoint generation is not a positive integer")
+    previous = block.get("previous_generation")
+    if previous is not None:
+        if (
+            not isinstance(previous, int)
+            or isinstance(previous, bool)
+            or not 1 <= previous < generation
+        ):
+            raise ImageError(
+                "checkpoint previous_generation is not an earlier positive integer"
+            )
+    created_at = block.get("created_at")
+    if not isinstance(created_at, str) or not 1 <= len(created_at) <= 64:
+        raise ImageError("checkpoint creation timestamp is invalid")
+    interval = block.get("requested_interval_seconds")
+    if (
+        not isinstance(interval, (int, float))
+        or isinstance(interval, bool)
+        or not 0 < float(interval) <= 86_400
+    ):
+        raise ImageError("checkpoint requested interval is out of range")
+    durability = block.get("durability")
+    if not isinstance(durability, dict):
+        raise ImageError("checkpoint durability metadata is not an object")
+    if durability.get("file_fsync") is not True:
+        raise ImageError(
+            "checkpoint durability metadata does not record a file flush"
+        )
+    if durability.get("directory_fsync") not in DIRECTORY_FSYNC_STATES:
+        raise ImageError("checkpoint durability metadata has an unknown directory state")
+    return block
+
+
 def _validate_legacy_compatibility(
     manifest: dict[str, Any],
     runtime: dict[str, Any],
@@ -591,6 +704,11 @@ def _validate_documents(
         _validate_contract_documents(manifest, runtime, source_metadata)
     else:
         _validate_legacy_compatibility(manifest, runtime, source_metadata)
+    if "checkpoint" in manifest:
+        # Absent is normal: manual freezes and every pre-existing image omit it.
+        # Present but malformed is corruption, and is refused here so no reader
+        # -- including recovery slot selection -- ever sees a half-checked block.
+        _validate_checkpoint_metadata(manifest["checkpoint"])
     validate_ir(ir)
     if _sha256(raw["code/program.py"]) != manifest.get("entry_program_sha256"):
         raise ImageError("program hash does not match manifest")

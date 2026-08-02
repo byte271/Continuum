@@ -273,6 +273,74 @@ Relocation still verifies size and SHA-256. It never silently accepts a
 different file. `OLD` must be an absolute POSIX or Windows path exactly as the
 source host recorded it; `NEW` is resolved on the current host.
 
+## Rolling crash-recovery checkpoints
+
+`freeze` commits one image and ends the process. A *checkpoint* commits an image
+and the program **keeps running**:
+
+```bash
+continuum run \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-interval 100ms \
+  --checkpoint-slots 2 \
+  program.py
+```
+
+Options precede the program name; everything after it is passed to the program,
+which is the existing `run` convention and is unchanged.
+
+After a crash, `kill -9`, or an unexpected restart:
+
+```bash
+continuum recover ./checkpoints
+```
+
+or, to continue the same command line:
+
+```bash
+continuum run --checkpoint-dir ./checkpoints --recover-latest program.py
+```
+
+Inspect a directory without resuming anything:
+
+```bash
+continuum checkpoints ./checkpoints          # human readable
+continuum checkpoints ./checkpoints --json   # machine readable
+continuum recover ./checkpoints --dry-run    # report the selection only
+```
+
+Exactly two slots rotate under monotonically increasing generation numbers. The
+new image is written to a temporary file in the same directory, flushed, then
+atomically moved over the **older** slot, so the newest committed checkpoint is
+never the file being overwritten.
+
+A new directory has **no** valid checkpoint until its first commit completes --
+there is nothing to fall back to before that. From the first successful commit
+onward, a valid generation remains readable at every instant, including while
+the next one is being written.
+Recovery validates both slots through the ordinary image reader and selects the
+highest generation, falling back to the older slot when the newest is corrupt.
+Selection reads `generation` and `lineage_id` from inside the checksum-covered
+container -- never a filename, mtime, directory order, file size, or an external
+pointer file.
+
+A failed checkpoint does not stop the program by default; it is reported loudly
+on stderr and the previous generation stays committed. Use
+`--checkpoint-failure terminate` for fail-closed behaviour.
+
+What this costs you on a crash, **while checkpoints are committing
+successfully**: roughly one interval of execution, plus the time to the next
+safe point and the commit. That window is **re-executed** on recovery, so
+external side effects in it can repeat.
+
+If commits are failing, the bound does not hold. Under the default
+`--checkpoint-failure continue` the program keeps running while checkpoints
+fail, so the newest valid generation can be arbitrarily old -- the failures are
+reported on stderr and by `continuum checkpoints`, and it is your job to watch
+them. Use `--checkpoint-failure terminate` if a stale checkpoint is worse than a
+stopped program. Read the `LIMITATIONS.md` section on checkpoints before relying
+on this for anything transactional.
+
 ## Migrating a frozen program onto new source
 
 A frozen image can be moved onto an edited revision of its own program, so a
@@ -306,7 +374,7 @@ CPython 3.13.14.
 python3 -m unittest discover -s tests -v
 ```
 
-The suite discovers 420 tests and is run natively on Linux x86_64, Apple
+The suite discovers 535 tests and is run natively on Linux x86_64, Apple
 Silicon macOS arm64, and Windows x86_64 by `runtime-bundles.yml`. Tests whose
 mechanism does not exist on the current host skip explicitly: POSIX signal
 notification and the shell installer skip on Windows, and the native Apple

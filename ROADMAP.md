@@ -55,3 +55,18 @@ visible as a change, not as a silently dropped line.
 12. Add a second unchanged application demonstration selected from the corpus;
     require nested active frames, a nontrivial graph, an external anti-restart
     audit, and an uninterrupted-control comparison.
+13. **Done (single platform).** Rolling crash-recovery checkpoints: a
+    non-terminating periodic checkpoint mode, a two-slot durable store with
+    monotonic generations, and `continuum recover`. Evidence retained: 64
+    checkpoint tests including failure injection at all seven commit stages and
+    an end-to-end real-`SIGKILL` recovery, green on Linux x86_64. The
+    milestone is **not** complete for macOS or Windows: see item 14.
+14. Prove rolling recovery on every native platform. Required before any
+    cross-platform rolling-recovery claim: a real forceful-termination and
+    recovery run on native macOS arm64 and Windows x86_64, a checkpoint image
+    moved between hosts and resumed by `cross-platform-proof.yml`, and a
+    Windows durability answer better than `directory_fsync:
+    unsupported-on-platform` or an explicit statement that Windows cannot
+    provide one. Until this lands, `LIMITATIONS.md` must keep saying that
+    cross-platform rolling recovery is unproven, and no power-loss claim may
+    appear anywhere in this repository without real hardware evidence.
